@@ -21,15 +21,21 @@ export const sendMessage = async (conversationId, messageData) => {
       conversationId,
       createdAt: serverTimestamp()
     });
-    
-    // Update conversation with last message and timestamp
+
+    // Confirm conversation exists before updating
     const conversationRef = doc(db, 'conversations', conversationId);
-    await updateDoc(conversationRef, {
-      lastMessage: messageData.text,
-      lastMessageSenderId: messageData.senderId,
-      updatedAt: serverTimestamp()
-    });
-    
+    const conversationSnap = await getDoc(conversationRef);
+
+    if (conversationSnap.exists()) {
+      await updateDoc(conversationRef, {
+        lastMessage: messageData.text,
+        lastMessageSenderId: messageData.senderId,
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      console.warn('Conversation document not found during sendMessage, skipping update.');
+    }
+
     return docRef.id;
   } catch (error) {
     console.error('Error sending message:', error);
@@ -224,83 +230,74 @@ export const subscribeToConversations = (userId, callback) => {
 // Get conversation by ID
 export const getConversationById = async (conversationId) => {
   try {
-    const docRef = doc(db, 'conversations', conversationId);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      const data = docSnap.data();
+    // Try to get the conversation by ID
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+
+    if (conversationSnap.exists()) {
+      const data = conversationSnap.data();
       return {
-        id: docSnap.id,
+        id: conversationSnap.id,
         ...data,
         updatedAt: data.updatedAt?.toDate() || new Date(),
         createdAt: data.createdAt?.toDate() || new Date()
       };
     }
-    
-    // If the conversation doesn't exist, try to see if it's a user ID
-    // and create a new conversation
-    try {
-      // Try to get user with this ID
-      const userRef = doc(db, 'users', conversationId);
-      const userSnap = await getDoc(userRef);
-      
-      if (userSnap.exists()) {
-        // It's a user ID, not a conversation ID
-        // We'll need the current user to create a conversation
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          throw new Error('You must be logged in to start a conversation');
-        }
-        
-        // Get current user profile
-        const currentUserRef = doc(db, 'users', currentUser.uid);
-        const currentUserSnap = await getDoc(currentUserRef);
-        
-        if (!currentUserSnap.exists()) {
-          throw new Error('Current user profile not found');
-        }
-        
-        const currentUserData = currentUserSnap.data();
-        const otherUserData = userSnap.data();
-        
-        // Create a conversation between these users
-        const conversationData = {
-          participants: [currentUser.uid, conversationId],
-          participantsInfo: [
-            {
-              uid: currentUser.uid,
-              name: `${currentUserData.firstName || ''} ${currentUserData.lastName || ''}`.trim(),
-              role: currentUserData.role || 'user'
-            },
-            {
-              uid: conversationId,
-              name: `${otherUserData.firstName || ''} ${otherUserData.lastName || ''}`.trim(),
-              role: otherUserData.role || 'user'
-            }
-          ],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          lastMessage: '',
-          lastMessageSenderId: ''
-        };
-        
-        const newConversationRef = await addDoc(collection(db, 'conversations'), conversationData);
-        
-        return {
-          id: newConversationRef.id,
-          ...conversationData,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+
+    // If conversation doesn't exist, check if it's a user ID
+    const userRef = doc(db, 'users', conversationId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('You must be logged in to start a conversation');
       }
-    } catch (userError) {
-      console.log('Failed to check if ID is a user ID:', userError);
-      // Continue with the original error
+
+      const currentUserRef = doc(db, 'users', currentUser.uid);
+      const currentUserSnap = await getDoc(currentUserRef);
+
+      if (!currentUserSnap.exists()) {
+        throw new Error('Current user profile not found');
+      }
+
+      const currentUserData = currentUserSnap.data();
+      const otherUserData = userSnap.data();
+
+      const conversationData = {
+        participants: [currentUser.uid, conversationId],
+        participantsInfo: [
+          {
+            uid: currentUser.uid,
+            name: `${currentUserData.firstName || ''} ${currentUserData.lastName || ''}`.trim(),
+            role: currentUserData.role || 'user'
+          },
+          {
+            uid: conversationId,
+            name: `${otherUserData.firstName || ''} ${otherUserData.lastName || ''}`.trim(),
+            role: otherUserData.role || 'user'
+          }
+        ],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageSenderId: ''
+      };
+
+      const newConversationRef = await addDoc(collection(db, 'conversations'), conversationData);
+
+      return {
+        id: newConversationRef.id,
+        ...conversationData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
     }
-    
+
+    // Neither a conversation nor a user ID
     throw new Error('Conversation not found');
   } catch (error) {
-    console.error('Error getting conversation:', error);
+    console.error('Error getting or creating conversation:', error);
     throw error;
   }
 };
@@ -309,11 +306,17 @@ export const getConversationById = async (conversationId) => {
 export const markConversationAsRead = async (conversationId, userId) => {
   try {
     const conversationRef = doc(db, 'conversations', conversationId);
-    
+    const snap = await getDoc(conversationRef);
+
+    if (!snap.exists()) {
+      console.warn('Conversation does not exist yet, skipping read mark');
+      return;
+    }
+
     await updateDoc(conversationRef, {
       [`readBy.${userId}`]: serverTimestamp()
     });
-    
+
     return true;
   } catch (error) {
     console.error('Error marking conversation as read:', error);

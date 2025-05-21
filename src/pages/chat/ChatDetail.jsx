@@ -15,6 +15,7 @@ import ChatInput from '@/components/chat/ChatInput';
 import { ArrowLeft, User, MessagesSquare } from 'lucide-react';
 
 const ChatDetail = () => {
+  const { id } = useParams();
   const { id: conversationId } = useParams();
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
@@ -40,24 +41,25 @@ const ChatDetail = () => {
     if (!currentUser || !conversationId) return;
     
     const loadConversation = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        
-        // Get conversation
-        const conversationData = await getConversationById(conversationId);
-        setConversation(conversationData);
-        
-        // Mark conversation as read
-        await markConversationAsRead(conversationId, currentUser.uid);
-        
-      } catch (err) {
-        console.error('Error loading conversation:', err);
-        setError('Failed to load conversation');
-      } finally {
-        setLoading(false);
-      }
-    };
+        try {
+          setLoading(true);
+          const conversation = await getConversationById(id); // may create one
+          setConversation(conversation);
+      
+          // Wait for Firestore to propagate the new conversation if just created
+          await new Promise(resolve => setTimeout(resolve, 500)); // small delay
+      
+          // Now mark it as read
+          await markConversationAsRead(conversation.id, currentUser.uid);
+      
+        } catch (error) {
+          console.error('Error loading conversation:', error);
+          setError(error.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
     
     loadConversation();
     
