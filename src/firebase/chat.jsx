@@ -10,7 +10,7 @@ import {
   doc,
   serverTimestamp
 } from 'firebase/firestore';
-import { db } from './config.jsx';
+import { auth, db } from './config.jsx';
 
 // Send a message
 export const sendMessage = async (conversationId, messageData) => {
@@ -235,9 +235,70 @@ export const getConversationById = async (conversationId) => {
         updatedAt: data.updatedAt?.toDate() || new Date(),
         createdAt: data.createdAt?.toDate() || new Date()
       };
-    } else {
-      throw new Error('Conversation not found');
     }
+    
+    // If the conversation doesn't exist, try to see if it's a user ID
+    // and create a new conversation
+    try {
+      // Try to get user with this ID
+      const userRef = doc(db, 'users', conversationId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        // It's a user ID, not a conversation ID
+        // We'll need the current user to create a conversation
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error('You must be logged in to start a conversation');
+        }
+        
+        // Get current user profile
+        const currentUserRef = doc(db, 'users', currentUser.uid);
+        const currentUserSnap = await getDoc(currentUserRef);
+        
+        if (!currentUserSnap.exists()) {
+          throw new Error('Current user profile not found');
+        }
+        
+        const currentUserData = currentUserSnap.data();
+        const otherUserData = userSnap.data();
+        
+        // Create a conversation between these users
+        const conversationData = {
+          participants: [currentUser.uid, conversationId],
+          participantsInfo: [
+            {
+              uid: currentUser.uid,
+              name: `${currentUserData.firstName || ''} ${currentUserData.lastName || ''}`.trim(),
+              role: currentUserData.role || 'user'
+            },
+            {
+              uid: conversationId,
+              name: `${otherUserData.firstName || ''} ${otherUserData.lastName || ''}`.trim(),
+              role: otherUserData.role || 'user'
+            }
+          ],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          lastMessage: '',
+          lastMessageSenderId: ''
+        };
+        
+        const newConversationRef = await addDoc(collection(db, 'conversations'), conversationData);
+        
+        return {
+          id: newConversationRef.id,
+          ...conversationData,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+    } catch (userError) {
+      console.log('Failed to check if ID is a user ID:', userError);
+      // Continue with the original error
+    }
+    
+    throw new Error('Conversation not found');
   } catch (error) {
     console.error('Error getting conversation:', error);
     throw error;
