@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { logoutUser } from '../../firebase/auth';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '@/components/ui/button';
+import CartIcon from '@/components/cart/CartIcon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,8 @@ import {
   LogOut,
   Carrot,
   Users,
-  BarChart
+  BarChart,
+  ShoppingBag
 } from 'lucide-react';
 
 const MainLayout = ({ children }) => {
@@ -64,6 +66,9 @@ const MainLayout = ({ children }) => {
           <div className="hidden md:flex items-center space-x-4">
             {currentUser ? (
               <>
+                {isKlient && (
+                  <CartIcon />
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="p-0">
@@ -117,6 +122,15 @@ const MainLayout = ({ children }) => {
                 >
                   Dashboard
                 </Link>
+                {isKlient && (
+                  <Link
+                    to="/cart"
+                    className="block py-2 px-4 rounded hover:bg-gray-100"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Shopping Cart
+                  </Link>
+                )}
                 <Link
                   to="/profile"
                   className="block py-2 px-4 rounded hover:bg-gray-100"
@@ -232,6 +246,18 @@ const MainLayout = ({ children }) => {
                       <Carrot className="mr-2 h-5 w-5" />
                       Browse Products
                     </Link>
+
+                    <Link
+                      to="/cart"
+                      className={`flex items-center p-2 rounded-md w-full ${
+                        location.pathname.startsWith('/cart')
+                          ? 'bg-green-50 text-green-600'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <ShoppingCart className="mr-2 h-5 w-5" />
+                      Shopping Cart
+                    </Link>
                   </>
                 )}
                 
@@ -243,7 +269,7 @@ const MainLayout = ({ children }) => {
                       : 'hover:bg-gray-100'
                   }`}
                 >
-                  <ShoppingCart className="mr-2 h-5 w-5" />
+                  <ShoppingBag className="mr-2 h-5 w-5" />
                   Orders
                 </Link>
                 

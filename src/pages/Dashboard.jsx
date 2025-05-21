@@ -7,7 +7,9 @@ import { getProductsByRolnik } from '../firebase/products';
 import { getAllRolniks, findNearbyRolniks } from '../firebase/users';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingCart, Package, Users, Activity } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ShoppingCart, Package, Users, Activity, Loader2 } from 'lucide-react';
+import OrderStatus from '@/components/orders/OrderStatus';
 
 const Dashboard = () => {
   const { userProfile } = useAuth();
@@ -15,36 +17,67 @@ const Dashboard = () => {
   const [products, setProducts] = useState([]);
   const [nearbyRolniks, setNearbyRolniks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!userProfile) return;
+      
       try {
-        if (userProfile) {
-          // Fetch data based on user role
-          if (userProfile.role === 'klient') {
+        setLoading(true);
+        setError('');
+        
+        // Fetch data based on user role
+        if (userProfile.role === 'klient') {
+          try {
             // Fetch orders for client
             const clientOrders = await getOrdersByClient(userProfile.uid);
             setOrders(clientOrders);
-            
+          } catch (orderErr) {
+            console.error('Error fetching client orders:', orderErr);
+            // Set empty array to prevent UI errors
+            setOrders([]);
+          }
+          
+          try {
             // Fetch nearby rolniks
             const nearby = await findNearbyRolniks(userProfile.postalCode);
             setNearbyRolniks(nearby);
-          } else if (userProfile.role === 'rolnik') {
+          } catch (rolnikErr) {
+            console.error('Error fetching nearby rolniks:', rolnikErr);
+            setNearbyRolniks([]);
+          }
+        } else if (userProfile.role === 'rolnik') {
+          try {
             // Fetch orders for rolnik
             const rolnikOrders = await getOrdersByRolnik(userProfile.uid);
             setOrders(rolnikOrders);
-            
+          } catch (orderErr) {
+            console.error('Error fetching rolnik orders:', orderErr);
+            setOrders([]);
+          }
+          
+          try {
             // Fetch products for rolnik
             const rolnikProducts = await getProductsByRolnik(userProfile.uid);
             setProducts(rolnikProducts);
-          } else if (userProfile.role === 'admin') {
+          } catch (productErr) {
+            console.error('Error fetching rolnik products:', productErr);
+            setProducts([]);
+          }
+        } else if (userProfile.role === 'admin') {
+          try {
             // Fetch all rolniks for admin
             const allRolniks = await getAllRolniks();
             setNearbyRolniks(allRolniks);
+          } catch (adminErr) {
+            console.error('Error fetching rolniks for admin:', adminErr);
+            setNearbyRolniks([]);
           }
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        setError('Failed to load some dashboard data. Please refresh to try again.');
       } finally {
         setLoading(false);
       }
@@ -54,12 +87,25 @@ const Dashboard = () => {
   }, [userProfile]);
 
   if (loading) {
-    return <div>Loading dashboard...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Welcome, {userProfile?.firstName}!</h1>
+      
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {userProfile?.role === 'klient' && (
@@ -191,36 +237,40 @@ const Dashboard = () => {
           {orders.slice(0, 3).map(order => (
             <Card key={order.id}>
               <CardContent className="p-4">
-                <div className="flex items-center">
-                  <div className="h-12 w-12 overflow-hidden rounded-md mr-4">
-                    {order.productImage && (
-                      <img
-                        src={order.productImage}
-                        alt={order.productName}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium">{order.productName}</h3>
-                    <p className="text-sm text-gray-600">
-                      {order.quantity} {order.unit} - ${order.totalPrice.toFixed(2)}
-                    </p>
-                    <div className="flex items-center mt-1">
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${
-                        order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </span>
-                      <span className="text-xs text-gray-500 ml-2">
-                        {new Date(order.createdAt).toLocaleDateString()}
-                      </span>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center">
+                    <div className="h-12 w-12 overflow-hidden rounded-md mr-4 bg-gray-100 flex-shrink-0">
+                      {(order.items?.[0]?.productImage || order.productImage) ? (
+                        <img
+                          src={order.items?.[0]?.productImage || order.productImage}
+                          alt={order.items?.[0]?.productName || order.productName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="h-6 w-6 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-medium">
+                        {order.items?.[0]?.productName || order.productName}
+                        {order.items && order.items.length > 1 && ` +${order.items.length - 1} more`}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {order.items?.[0]?.quantity || order.quantity} {order.items?.[0]?.unit || order.unit} - 
+                        ${order.totalPrice.toFixed(2)}
+                      </p>
+                      <div className="flex items-center mt-1">
+                        <OrderStatus status={order.status} size="badge" />
+                        <span className="text-xs text-gray-500 ml-2">
+                          {new Date(order.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/orders/${order.id}`}>View</Link>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={`/orders/${order.id}`}>View Details</Link>
                   </Button>
                 </div>
               </CardContent>

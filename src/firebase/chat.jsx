@@ -2,77 +2,260 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where,
-  orderBy,
-  onSnapshot
+  onSnapshot,
+  updateDoc,
+  doc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from './config.jsx';
 
 // Send a message
-export const sendMessage = async (messageData) => {
-  await addDoc(collection(db, 'messages'), {
-    ...messageData,
-    createdAt: new Date().toISOString()
-  });
-  
-  return true;
+export const sendMessage = async (conversationId, messageData) => {
+  try {
+    // Add message
+    const docRef = await addDoc(collection(db, 'messages'), {
+      ...messageData,
+      conversationId,
+      createdAt: serverTimestamp()
+    });
+    
+    // Update conversation with last message and timestamp
+    const conversationRef = doc(db, 'conversations', conversationId);
+    await updateDoc(conversationRef, {
+      lastMessage: messageData.text,
+      lastMessageSenderId: messageData.senderId,
+      updatedAt: serverTimestamp()
+    });
+    
+    return docRef.id;
+  } catch (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
 };
 
 // Get messages for a conversation
-export const getMessages = async (conversationId) => {
-  const q = query(
-    collection(db, 'messages'), 
-    where('conversationId', '==', conversationId),
-    orderBy('createdAt', 'asc')
-  );
-  const querySnapshot = await getDocs(q);
-  
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+export const getMessages = async (conversationId, messageLimit = 50) => {
+  try {
+    // Query without orderBy to avoid composite index requirement
+    const q = query(
+      collection(db, 'messages'), 
+      where('conversationId', '==', conversationId)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    const messages = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date()
+      };
+    });
+    
+    // Sort by createdAt in JavaScript
+    messages.sort((a, b) => a.createdAt - b.createdAt);
+    
+    // Apply limit if needed
+    return messageLimit ? messages.slice(0, messageLimit) : messages;
+  } catch (error) {
+    console.error('Error getting messages:', error);
+    throw error;
+  }
 };
 
 // Subscribe to messages for a conversation
 export const subscribeToMessages = (conversationId, callback) => {
-  const q = query(
-    collection(db, 'messages'), 
-    where('conversationId', '==', conversationId),
-    orderBy('createdAt', 'asc')
-  );
-  
-  return onSnapshot(q, (querySnapshot) => {
-    const messages = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(messages);
-  });
+  try {
+    // Query without orderBy to avoid composite index requirement
+    const q = query(
+      collection(db, 'messages'), 
+      where('conversationId', '==', conversationId)
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const messages = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      });
+      
+      // Sort by createdAt in JavaScript instead
+      messages.sort((a, b) => a.createdAt - b.createdAt);
+      
+      callback(messages);
+    });
+  } catch (error) {
+    console.error('Error subscribing to messages:', error);
+    throw error;
+  }
 };
 
-// Create a new conversation
-export const createConversation = async (conversationData) => {
-  const docRef = await addDoc(collection(db, 'conversations'), {
-    ...conversationData,
-    createdAt: new Date().toISOString()
-  });
-  
-  return docRef.id;
+// Create a new conversation or get existing one
+export const getOrCreateConversation = async (participants) => {
+  try {
+    // Check if conversation already exists between these users
+    const participant1 = participants[0];
+    const participant2 = participants[1];
+    
+    // Query for conversation where both users are participants
+    const q1 = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', participant1.uid)
+    );
+    
+    const querySnapshot = await getDocs(q1);
+    
+    // Find a conversation that includes the second participant
+    const existingConversation = querySnapshot.docs.find(doc => {
+      const data = doc.data();
+      return data.participants.includes(participant2.uid);
+    });
+    
+    if (existingConversation) {
+      return {
+        id: existingConversation.id,
+        ...existingConversation.data()
+      };
+    }
+    
+    // If no existing conversation, create a new one
+    const conversationData = {
+      participants: [participant1.uid, participant2.uid],
+      participantsInfo: [
+        {
+          uid: participant1.uid,
+          name: `${participant1.firstName} ${participant1.lastName}`,
+          role: participant1.role
+        },
+        {
+          uid: participant2.uid,
+          name: `${participant2.firstName} ${participant2.lastName}`,
+          role: participant2.role
+        }
+      ],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastMessage: '',
+      lastMessageSenderId: ''
+    };
+    
+    const docRef = await addDoc(collection(db, 'conversations'), conversationData);
+    
+    return {
+      id: docRef.id,
+      ...conversationData
+    };
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    throw error;
+  }
 };
 
 // Get conversations for a user
 export const getConversations = async (userId) => {
-  const q = query(
-    collection(db, 'conversations'),
-    where('participants', 'array-contains', userId),
-    orderBy('updatedAt', 'desc')
-  );
-  
-  const querySnapshot = await getDocs(q);
-  
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  try {
+    // Query without orderBy to avoid requiring a composite index
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', userId)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    // Map the data and convert timestamps
+    const conversations = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        createdAt: data.createdAt?.toDate() || new Date()
+      };
+    });
+    
+    // Sort by updatedAt in JavaScript instead of in the query
+    return conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (error) {
+    console.error('Error getting conversations:', error);
+    throw error;
+  }
+};
+
+// Subscribe to conversations for a user
+export const subscribeToConversations = (userId, callback) => {
+  try {
+    // Version without ordering (no composite index needed)
+    // We'll sort the results in JavaScript instead
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', userId)
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const conversations = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      });
+      
+      // Sort by updatedAt in descending order in JavaScript
+      conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+      
+      callback(conversations);
+    });
+  } catch (error) {
+    console.error('Error subscribing to conversations:', error);
+    throw error;
+  }
+};
+
+// Get conversation by ID
+export const getConversationById = async (conversationId) => {
+  try {
+    const docRef = doc(db, 'conversations', conversationId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        createdAt: data.createdAt?.toDate() || new Date()
+      };
+    } else {
+      throw new Error('Conversation not found');
+    }
+  } catch (error) {
+    console.error('Error getting conversation:', error);
+    throw error;
+  }
+};
+
+// Mark conversation as read
+export const markConversationAsRead = async (conversationId, userId) => {
+  try {
+    const conversationRef = doc(db, 'conversations', conversationId);
+    
+    await updateDoc(conversationRef, {
+      [`readBy.${userId}`]: serverTimestamp()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Error marking conversation as read:', error);
+    throw error;
+  }
 };
