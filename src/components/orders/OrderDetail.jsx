@@ -23,16 +23,28 @@ const OrderDetail = () => {
   const [success, setSuccess] = useState('');
   
   const isRolnik = userProfile?.role === 'rolnik';
+  const isAdmin = userProfile?.role === 'admin';
+  const canChangeStatus = isRolnik || isAdmin;
+  
+  // Debug logging
+  console.log('OrderDetail Debug:', {
+    userProfile,
+    isRolnik,
+    canChangeStatus,
+    orderId: id
+  });
   
   useEffect(() => {
     const fetchOrder = async () => {
       try {
         setLoading(true);
+        console.log('Fetching order:', id);
         const orderData = await getOrderById(id);
+        console.log('Order data received:', orderData);
         setOrder(orderData);
       } catch (error) {
         console.error('Error fetching order:', error);
-        setError('Failed to load order details');
+        setError('Failed to load order details: ' + error.message);
       } finally {
         setLoading(false);
       }
@@ -41,23 +53,71 @@ const OrderDetail = () => {
     fetchOrder();
   }, [id]);
   
-  const handleUpdateStatus = async (newStatus) => {
+  const handleUpdateStatus = async (newStatus, note = '') => {
+    console.log('handleUpdateStatus called with:', { newStatus, note, orderId: id });
+    
+    if (!canChangeStatus) {
+      const errorMsg = 'You do not have permission to update this order status';
+      console.error(errorMsg);
+      setError(errorMsg);
+      return Promise.reject(new Error(errorMsg));
+    }
+    
+    if (!order) {
+      const errorMsg = 'Order data not available';
+      console.error(errorMsg);
+      setError(errorMsg);
+      return Promise.reject(new Error(errorMsg));
+    }
+    
+    // Check if this is a valid status transition
+    const currentStatus = order.status;
+    const statusFlow = {
+      pending: ['confirmed', 'cancelled'],
+      confirmed: ['preparing', 'cancelled'],
+      preparing: ['ready', 'cancelled'],
+      ready: ['in_transit', 'delivered', 'completed', 'cancelled'],
+      in_transit: ['delivered', 'cancelled'],
+      delivered: ['completed'],
+      completed: [],
+      cancelled: []
+    };
+    
+    const allowedStatuses = statusFlow[currentStatus] || [];
+    if (!allowedStatuses.includes(newStatus)) {
+      const errorMsg = `Cannot change status from ${currentStatus} to ${newStatus}`;
+      console.error(errorMsg);
+      setError(errorMsg);
+      return Promise.reject(new Error(errorMsg));
+    }
+    
     try {
       setStatusUpdating(true);
       setError('');
       setSuccess('');
       
-      await updateOrderStatus(id, newStatus, statusNote);
+      console.log('Calling updateOrderStatus...');
+      await updateOrderStatus(id, newStatus, note || statusNote);
+      console.log('Status update successful');
       
       // Refresh order data
+      console.log('Refreshing order data...');
       const updatedOrder = await getOrderById(id);
+      console.log('Updated order data:', updatedOrder);
       setOrder(updatedOrder);
       
       setSuccess(`Order status updated to ${ORDER_STATUSES[newStatus].label}`);
       setStatusNote('');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(''), 3000);
+      
+      return Promise.resolve();
     } catch (error) {
       console.error('Error updating order status:', error);
-      setError('Failed to update order status');
+      const errorMsg = `Failed to update order status: ${error.message}`;
+      setError(errorMsg);
+      return Promise.reject(error);
     } finally {
       setStatusUpdating(false);
     }
@@ -150,7 +210,17 @@ const OrderDetail = () => {
                     Placed on {new Date(order.createdAt).toLocaleDateString()}
                   </CardDescription>
                 </div>
-                <OrderStatus status={order.status} showDescription={true} size="large" />
+                <OrderStatus 
+                  status={order.status} 
+                  showDescription={true} 
+                  size="large"
+                  clickable={true}
+                  canChangeStatus={canChangeStatus && (isAdmin || order.rolnikId === userProfile?.uid)}
+                  onStatusChange={handleUpdateStatus}
+                  statusHistory={order.statusHistory}
+                  orderId={order.id}
+                  userRole={userProfile?.role}
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -359,16 +429,16 @@ const OrderDetail = () => {
             </CardContent>
           </Card>
           
-          {/* Status Management for Farmers */}
-          {isRolnik && (
+          {/* Status Management for Farmers - Legacy Manual Controls */}
+          {canChangeStatus && (order.rolnikId === userProfile?.uid || isAdmin) && (
             <Card>
               <CardHeader>
-                <CardTitle>Update Order Status</CardTitle>
+                <CardTitle>Manual Status Update</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <p className="text-sm">
-                    Current Status: <OrderStatus status={order.status} size="badge" />
+                    Current Status: <OrderStatus status={order.status} size="badge" clickable={false} />
                   </p>
                   
                   {order.status !== 'completed' && order.status !== 'cancelled' && (

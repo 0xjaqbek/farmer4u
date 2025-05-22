@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getOrdersByClient, getOrdersByRolnik } from '../../firebase/orders';
+import { getOrdersByClient, getOrdersByRolnik, updateOrderStatus } from '../../firebase/orders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -48,6 +48,38 @@ const OrderList = () => {
     
     fetchOrders();
   }, [userProfile]);
+  
+  // Handle status change from the enhanced status component
+  const handleStatusChange = async (orderId, newStatus) => {
+    try {
+      await updateOrderStatus(orderId, newStatus, `Status updated to ${newStatus} via quick action`);
+      
+      // Update the order in the local state
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId 
+            ? { 
+                ...order, 
+                status: newStatus,
+                statusHistory: [
+                  ...(order.statusHistory || []),
+                  {
+                    status: newStatus,
+                    timestamp: new Date().toISOString(),
+                    note: `Status updated to ${newStatus} via quick action`
+                  }
+                ]
+              }
+            : order
+        )
+      );
+      
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      return Promise.reject(error);
+    }
+  };
   
   // Filter orders by status for tabs
   const getFilteredOrders = (status) => {
@@ -104,19 +136,35 @@ const OrderList = () => {
         </TabsList>
         
         <TabsContent value="all" className="pt-4">
-          <OrdersTable orders={getFilteredOrders('all')} userRole={userProfile?.role} />
+          <OrdersTable 
+            orders={getFilteredOrders('all')} 
+            userRole={userProfile?.role} 
+            onStatusChange={handleStatusChange}
+          />
         </TabsContent>
         
         <TabsContent value="active" className="pt-4">
-          <OrdersTable orders={getFilteredOrders('active')} userRole={userProfile?.role} />
+          <OrdersTable 
+            orders={getFilteredOrders('active')} 
+            userRole={userProfile?.role} 
+            onStatusChange={handleStatusChange}
+          />
         </TabsContent>
         
         <TabsContent value="completed" className="pt-4">
-          <OrdersTable orders={getFilteredOrders('completed')} userRole={userProfile?.role} />
+          <OrdersTable 
+            orders={getFilteredOrders('completed')} 
+            userRole={userProfile?.role} 
+            onStatusChange={handleStatusChange}
+          />
         </TabsContent>
         
         <TabsContent value="cancelled" className="pt-4">
-          <OrdersTable orders={getFilteredOrders('cancelled')} userRole={userProfile?.role} />
+          <OrdersTable 
+            orders={getFilteredOrders('cancelled')} 
+            userRole={userProfile?.role} 
+            onStatusChange={handleStatusChange}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -124,7 +172,9 @@ const OrderList = () => {
 };
 
 // Extracted order table component for reuse across tabs
-const OrdersTable = ({ orders, userRole }) => {
+const OrdersTable = ({ orders, userRole, onStatusChange }) => {
+  const isRolnik = userRole === 'rolnik';
+  
   if (orders.length === 0) {
     return (
       <Card>
@@ -143,7 +193,7 @@ const OrdersTable = ({ orders, userRole }) => {
   return (
     <div className="space-y-4">
       {orders.map(order => (
-        <Card key={order.id}>
+        <Card key={order.id} className="hover:shadow-md transition-shadow">
           <CardContent className="p-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center">
@@ -161,16 +211,16 @@ const OrdersTable = ({ orders, userRole }) => {
                   )}
                 </div>
                 <div>
-                  <div className="flex items-center">
-                    <h3 className="font-medium">
+                  <div className="flex items-center mb-1">
+                    <h3 className="font-medium mr-3">
                       Order #{order.trackingId || order.id.substring(0, 8)}
                     </h3>
-                    <span className="text-xs text-gray-500 ml-2">
+                    <span className="text-xs text-gray-500">
                       {new Date(order.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                   
-                  <p className="text-sm mt-1">
+                  <p className="text-sm mb-2">
                     <span className="font-medium">
                       {order.items?.[0]?.productName || order.productName}
                     </span>
@@ -179,11 +229,29 @@ const OrdersTable = ({ orders, userRole }) => {
                     }
                   </p>
                   
-                  <div className="flex items-center mt-1">
-                    <OrderStatus status={order.status} size="badge" />
-                    <span className="text-sm font-medium ml-4">
+                  <div className="flex items-center space-x-4">
+                    <OrderStatus 
+                      status={order.status} 
+                      size="badge" 
+                      clickable={true}
+                      canChangeStatus={isRolnik}
+                      onStatusChange={(newStatus) => onStatusChange(order.id, newStatus)}
+                      statusHistory={order.statusHistory}
+                      orderId={order.id}
+                    />
+                    <span className="text-sm font-medium">
                       ${order.totalPrice.toFixed(2)}
                     </span>
+                    {isRolnik && (
+                      <span className="text-xs text-gray-500">
+                        Customer: {order.clientName}
+                      </span>
+                    )}
+                    {!isRolnik && (
+                      <span className="text-xs text-gray-500">
+                        From: {order.rolnikName}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

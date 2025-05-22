@@ -99,17 +99,20 @@ export const getOrdersByRolnik = async (rolnikId) => {
 // Get order by ID
 export const getOrderById = async (orderId) => {
   try {
+    console.log('Getting order by ID:', orderId);
     const docRef = doc(db, 'orders', orderId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
       const data = docSnap.data();
+      console.log('Order data found:', data);
       return {
         id: docSnap.id,
         ...data,
         createdAt: data.createdAt?.toDate() || new Date()
       };
     } else {
+      console.error('Order not found:', orderId);
       throw new Error('Order not found');
     }
   } catch (error) {
@@ -145,31 +148,57 @@ export const getOrderByTrackingId = async (trackingId) => {
   }
 };
 
-// Update order status
+// Update order status with improved error handling and logging
 export const updateOrderStatus = async (orderId, status, note = '') => {
   try {
+    console.log('Updating order status:', { orderId, status, note });
+    
+    // Validate inputs
+    if (!orderId) {
+      throw new Error('Order ID is required');
+    }
+    
+    if (!status) {
+      throw new Error('Status is required');
+    }
+    
+    if (!ORDER_STATUSES[status]) {
+      throw new Error(`Invalid status: ${status}`);
+    }
+    
     const docRef = doc(db, 'orders', orderId);
+    console.log('Getting current order data...');
     const docSnap = await getDoc(docRef);
     
     if (!docSnap.exists()) {
+      console.error('Order not found in database:', orderId);
       throw new Error('Order not found');
     }
     
-    const statusHistory = docSnap.data().statusHistory || [];
+    const currentData = docSnap.data();
+    console.log('Current order data:', currentData);
+    
+    const statusHistory = currentData.statusHistory || [];
     
     // Add new status to history
     const newStatusEntry = {
       status,
       timestamp: new Date().toISOString(),
-      note
+      note: note || `Status changed to ${status}`,
+      updatedBy: 'user' // Could be enhanced to include user info
     };
     
+    const updatedStatusHistory = [...statusHistory, newStatusEntry];
+    
+    console.log('Updating document with new status...');
     await updateDoc(docRef, {
       status,
-      statusHistory: [...statusHistory, newStatusEntry],
-      updatedAt: serverTimestamp()
+      statusHistory: updatedStatusHistory,
+      updatedAt: serverTimestamp(),
+      lastStatusUpdate: newStatusEntry
     });
     
+    console.log('Order status updated successfully');
     return true;
   } catch (error) {
     console.error('Error updating order status:', error);
