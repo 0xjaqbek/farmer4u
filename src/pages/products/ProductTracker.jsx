@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getProductById } from '../../firebase/products.jsx';
 import { getUserById } from '../../firebase/users.jsx';
-import { getOrderByTrackingId } from '../../firebase/orders.jsx';
+import { findOrderByTrackingCode } from '../../firebase/orders.jsx'; // Import the new enhanced function
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -42,38 +42,62 @@ const ProductTracker = () => {
         setLoading(true);
         setError('');
         
-        // First, try to find order by tracking ID
+        console.log('Tracking ID to search:', trackingId);
+        
+        let orderData = null;
+        
+        // Use the enhanced order lookup function
         try {
-          const orderData = await getOrderByTrackingId(trackingId);
+          console.log('Searching for order with enhanced lookup...');
+          orderData = await findOrderByTrackingCode(trackingId);
+          console.log('Found order:', orderData);
+        } catch (orderError) {
+          console.log('No order found with tracking code:', trackingId);
+          console.log('Error:', orderError.message);
+        }
+        
+        if (orderData) {
+          console.log('Order found:', orderData);
           setOrder(orderData);
           
-          // If order found, get the product and farmer details
-          if (orderData) {
-            let productData;
-            
-            if (orderData.items && orderData.items.length > 0) {
-              // Get first product from items array
-              productData = await getProductById(orderData.items[0].productId);
-            } else if (orderData.productId) {
-              // Get product from direct reference
-              productData = await getProductById(orderData.productId);
-            }
-            
-            if (productData) {
-              setProduct(productData);
-              
-              // Get farmer details
-              if (orderData.rolnikId) {
-                const farmerData = await getUserById(orderData.rolnikId);
-                setFarmer(farmerData);
+          // Get product and farmer details from the order
+          let productData = null;
+          
+          if (orderData.items && orderData.items.length > 0) {
+            // Get first product from items array
+            if (orderData.items[0].productId) {
+              try {
+                productData = await getProductById(orderData.items[0].productId);
+              } catch (prodError) {
+                console.log('Could not fetch product details:', prodError);
               }
             }
+          } else if (orderData.productId) {
+            // Get product from direct reference (older order structure)
+            try {
+              productData = await getProductById(orderData.productId);
+            } catch (prodError) {
+              console.log('Could not fetch product details:', prodError);
+            }
           }
-        } catch (orderError) {
-          console.error('Error fetching order by tracking ID:', orderError);
           
-          // If order not found, try to get product directly
+          if (productData) {
+            setProduct(productData);
+          }
+          
+          // Get farmer details
+          if (orderData.rolnikId) {
+            try {
+              const farmerData = await getUserById(orderData.rolnikId);
+              setFarmer(farmerData);
+            } catch (farmerError) {
+              console.log('Could not fetch farmer details:', farmerError);
+            }
+          }
+        } else {
+          // If no order found, try to get product directly (for product QR codes)
           try {
+            console.log('No order found, trying to get product directly...');
             const productData = await getProductById(trackingId);
             setProduct(productData);
             
@@ -82,8 +106,8 @@ const ProductTracker = () => {
               setFarmer(farmerData);
             }
           } catch (productError) {
-            console.error('Error fetching product:', productError);
-            setError('Unable to find product or order. Please verify your tracking code.');
+            console.error('No product found either:', productError);
+            setError('Unable to find order or product. Please verify your tracking code.');
           }
         }
       } catch (err) {
@@ -94,7 +118,12 @@ const ProductTracker = () => {
       }
     };
     
-    fetchData();
+    if (trackingId) {
+      fetchData();
+    } else {
+      setLoading(false);
+      setError('No tracking ID provided');
+    }
   }, [trackingId]);
   
   const handleTrackingSearch = (e) => {
@@ -113,6 +142,7 @@ const ProductTracker = () => {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading tracking information...</p>
+            <p className="mt-2 text-sm text-gray-500">Searching for: {trackingId}</p>
           </div>
         </div>
       </div>
@@ -148,12 +178,19 @@ const ProductTracker = () => {
               Track
             </Button>
           </form>
+          <p className="text-xs text-gray-500 mt-2">
+            Current search: {trackingId}
+          </p>
         </CardContent>
       </Card>
       
       {error ? (
         <Alert variant="destructive" className="mb-6">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error}
+            <br />
+            <strong>Debug info:</strong> Searched for tracking ID "{trackingId}"
+          </AlertDescription>
         </Alert>
       ) : (
         <>
@@ -223,16 +260,26 @@ const ProductTracker = () => {
                       <div>
                         <p className="font-medium">{order.productName}</p>
                         <p className="text-sm text-gray-500">
-                          {order.quantity} {order.unit} × ${order.price.toFixed(2)}
+                          {order.quantity} {order.unit} × ${order.price?.toFixed(2)}
                         </p>
                       </div>
                     </div>
                   )}
                 </div>
                 
+                {/* Order Total */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-md">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Total Amount:</span>
+                    <span className="text-xl font-bold text-green-600">
+                      ${order.totalPrice.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                
                 {/* Shipping Status Timeline */}
                 <div className="mb-6">
-                  <h3 className="font-semibold text-lg mb-3">Shipping Status</h3>
+                  <h3 className="font-semibold text-lg mb-3">Order Status Timeline</h3>
                   {order.statusHistory && order.statusHistory.length > 0 ? (
                     <OrderTimeline statusHistory={order.statusHistory} />
                   ) : (
@@ -241,10 +288,10 @@ const ProductTracker = () => {
                         <Info className="h-5 w-5 text-yellow-500 mr-2 mt-0.5" />
                         <div>
                           <p className="font-medium text-yellow-700">
-                            Order status is {order.status}
+                            Current Status: {order.status}
                           </p>
                           <p className="text-sm text-yellow-700 mt-1">
-                            Detailed tracking information is not available yet.
+                            Detailed tracking timeline will appear here as your order progresses.
                           </p>
                         </div>
                       </div>
@@ -262,7 +309,9 @@ const ProductTracker = () => {
                         <div>
                           <p className="font-medium">Shipping Address</p>
                           <p className="text-sm text-gray-600">
-                            {order.customerInfo.address}, {order.customerInfo.city}, {order.customerInfo.postalCode}
+                            {order.customerInfo.address && `${order.customerInfo.address}, `}
+                            {order.customerInfo.city && `${order.customerInfo.city}, `}
+                            {order.customerInfo.postalCode}
                           </p>
                         </div>
                       </div>
@@ -283,7 +332,7 @@ const ProductTracker = () => {
                           <div>
                             <p className="font-medium text-green-700">Delivered</p>
                             <p className="text-sm text-green-600">
-                              Your order has been delivered
+                              Your order has been delivered successfully
                             </p>
                           </div>
                         </div>
@@ -408,6 +457,11 @@ const ProductTracker = () => {
                     <p className="text-sm text-gray-600">
                       {order?.trackingId || trackingId}
                     </p>
+                    {order && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Database ID: {order.id}
+                      </p>
+                    )}
                   </div>
                 </div>
                 

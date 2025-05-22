@@ -1,3 +1,6 @@
+// Add this function to your src/firebase/orders.jsx file
+// This provides better order lookup capabilities
+
 import { 
   collection, 
   addDoc, 
@@ -11,7 +14,86 @@ import {
 } from 'firebase/firestore';
 import { db } from './config.jsx';
 
-// Create a new order
+// Enhanced order lookup function
+export const findOrderByTrackingCode = async (trackingCode) => {
+  try {
+    console.log('Searching for order with tracking code:', trackingCode);
+    
+    // Strategy 1: Try to find by trackingId field
+    try {
+      const q1 = query(
+        collection(db, 'orders'),
+        where('trackingId', '==', trackingCode)
+      );
+      
+      const querySnapshot1 = await getDocs(q1);
+      
+      if (!querySnapshot1.empty) {
+        const doc = querySnapshot1.docs[0];
+        const data = doc.data();
+        console.log('Found order by trackingId:', doc.id);
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      }
+    } catch (error) {
+      console.log('Error searching by trackingId:', error);
+    }
+    
+    // Strategy 2: Try to find by document ID directly
+    try {
+      const docRef = doc(db, 'orders', trackingCode);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log('Found order by document ID:', trackingCode);
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date()
+        };
+      }
+    } catch (error) {
+      console.log('Error searching by document ID:', error);
+    }
+    
+    // Strategy 3: Search for orders where the ID starts with the tracking code
+    // This handles cases where tracking code is a substring of the full ID
+    try {
+      const q3 = query(collection(db, 'orders'));
+      const querySnapshot3 = await getDocs(q3);
+      
+      for (const docSnap of querySnapshot3.docs) {
+        const orderId = docSnap.id;
+        // Check if the order ID starts with the tracking code
+        if (orderId.startsWith(trackingCode) || orderId.substring(0, 8) === trackingCode) {
+          const data = docSnap.data();
+          console.log('Found order by ID substring match:', orderId);
+          return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date()
+          };
+        }
+      }
+    } catch (error) {
+      console.log('Error in substring search:', error);
+    }
+    
+    // If no order found by any method
+    console.log('No order found with tracking code:', trackingCode);
+    throw new Error('Order not found');
+    
+  } catch (error) {
+    console.error('Error in findOrderByTrackingCode:', error);
+    throw error;
+  }
+};
+
+// Update your existing functions to ensure they exist
 export const createOrder = async (orderData) => {
   try {
     // Add status tracking
@@ -31,6 +113,7 @@ export const createOrder = async (orderData) => {
       createdAt: serverTimestamp()
     });
     
+    console.log('Order created with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
     console.error('Error creating order:', error);
@@ -121,7 +204,7 @@ export const getOrderById = async (orderId) => {
   }
 };
 
-// Get order by tracking ID
+// Get order by tracking ID (original function)
 export const getOrderByTrackingId = async (trackingId) => {
   try {
     const q = query(

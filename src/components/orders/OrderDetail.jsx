@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import OrderStatus from '@/components/orders/OrderStatus';
 import OrderTimeline from '@/components/orders/OrderTimeline';
-import { QrCode, ArrowLeft, Truck, Package, CheckCircle, XCircle, MessageSquare, Printer } from 'lucide-react';
+import { QrCode, ArrowLeft, Truck, Package, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -25,14 +25,6 @@ const OrderDetail = () => {
   const isRolnik = userProfile?.role === 'rolnik';
   const isAdmin = userProfile?.role === 'admin';
   const canChangeStatus = isRolnik || isAdmin;
-  
-  // Debug logging
-  console.log('OrderDetail Debug:', {
-    userProfile,
-    isRolnik,
-    canChangeStatus,
-    orderId: id
-  });
   
   useEffect(() => {
     const fetchOrder = async () => {
@@ -52,6 +44,121 @@ const OrderDetail = () => {
     
     fetchOrder();
   }, [id]);
+
+  const handlePrintQR = () => {
+    if (!order) return;
+    
+    const printWindow = window.open('', '', 'width=800,height=600');
+    const trackingUrl = `${window.location.origin}/track/product/${order.trackingId || order.id}`;
+    
+    const content = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Order QR Code - ${order.trackingId || order.id.substring(0, 8)}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          .qr-container {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .order-info {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 15px 0 10px;
+          }
+          .tracking-id {
+            font-size: 16px;
+            margin-bottom: 5px;
+          }
+          .order-details {
+            font-size: 14px;
+            margin-bottom: 10px;
+          }
+          .farm-name {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 20px;
+          }
+          .instructions {
+            font-size: 11px;
+            color: #999;
+            margin-top: 20px;
+            text-align: center;
+            max-width: 400px;
+            line-height: 1.4;
+          }
+          .tracking-url {
+            font-size: 10px;
+            color: #666;
+            margin-top: 10px;
+            word-break: break-all;
+          }
+          @media print {
+            .no-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="qr-container">
+          <div class="order-info">Order Tracking QR Code</div>
+          <div class="tracking-id">Order #${order.trackingId || order.id.substring(0, 8)}</div>
+          <div class="order-details">
+            Total: $${order.totalPrice.toFixed(2)} | Status: ${order.status}
+          </div>
+          <div class="farm-name">From: ${order.rolnikName}</div>
+          
+          <div style="margin: 20px 0;">
+            <svg width="200" height="200" style="border: 1px solid #ddd;">
+              <rect width="200" height="200" fill="white"/>
+              <text x="100" y="80" text-anchor="middle" fill="#666" font-size="12">
+                QR Code for Order
+              </text>
+              <text x="100" y="100" text-anchor="middle" fill="#666" font-size="10">
+                #${order.trackingId || order.id.substring(0, 8)}
+              </text>
+              <text x="100" y="120" text-anchor="middle" fill="#666" font-size="8">
+                Scan to track order
+              </text>
+              <text x="100" y="140" text-anchor="middle" fill="#999" font-size="6">
+                Or visit the URL below
+              </text>
+            </svg>
+          </div>
+          
+          <div class="instructions">
+            <strong>How to track your order:</strong><br>
+            Scan this QR code with your phone camera or QR scanner app to view real-time order status and delivery information.
+            <br><br>
+            <strong>Manual tracking:</strong> Visit our website and enter tracking code: <strong>${order.trackingId || order.id.substring(0, 8)}</strong>
+          </div>
+          
+          <div class="tracking-url">
+            Tracking URL: ${trackingUrl}
+          </div>
+        </div>
+        
+        <div class="no-print" style="margin-top: 30px;">
+          <button onclick="window.print()" style="margin-right: 10px; padding: 10px 20px; font-size: 14px;">Print</button>
+          <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px;">Close</button>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.open();
+    printWindow.document.write(content);
+    printWindow.document.close();
+  };
   
   const handleUpdateStatus = async (newStatus, note = '') => {
     console.log('handleUpdateStatus called with:', { newStatus, note, orderId: id });
@@ -415,21 +522,26 @@ const OrderDetail = () => {
               </div>
               
               <div className="text-center">
-                <Button variant="outline" className="w-full" asChild>
+                <Button variant="outline" className="w-full mb-2" asChild>
                   <Link to={`/track/product/${order.trackingId || id}`} target="_blank">
                     <Truck className="mr-2 h-4 w-4" />
                     Track Order
                   </Link>
                 </Button>
-                <Button variant="ghost" size="sm" className="mt-2">
-                  <Printer className="mr-2 h-4 w-4" />
-                  Print Label
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={handlePrintQR}
+                >
+                  <QrCode className="mr-2 h-4 w-4" />
+                  Print QR Code
                 </Button>
               </div>
             </CardContent>
           </Card>
           
-          {/* Status Management for Farmers - Legacy Manual Controls */}
+          {/* Status Management for Farmers */}
           {canChangeStatus && (order.rolnikId === userProfile?.uid || isAdmin) && (
             <Card>
               <CardHeader>
