@@ -74,3 +74,4 @@ out
 yarn.lock
 package-lock.json
 EOL
+serviceAccountKey.json
