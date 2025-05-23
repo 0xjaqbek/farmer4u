@@ -1,7 +1,6 @@
 // src/services/blockchain.js
 import * as anchor from '@coral-xyz/anchor';
 import { Connection, PublicKey, Keypair, clusterApiUrl } from '@solana/web3.js';
-import { AnchorWallet } from '@solana/wallet-adapter-react';
 import CryptoJS from 'crypto-js';
 import { db } from '../firebase/config.jsx';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'; // Added getDoc import
@@ -11,7 +10,7 @@ class BlockchainService {
   constructor() {
     // Połączenie z Solana Devnet
     this.connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-    this.programId = new PublicKey('FarmDirect11111111111111111111111111111111');
+    this.programId = new PublicKey('9n3L3af5CKKPqdUXjCFBnt5kto95tqCjZv9vANECuS4V');
     this.program = null;
     this.wallet = null;
     

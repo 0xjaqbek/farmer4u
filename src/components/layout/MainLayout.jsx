@@ -1,44 +1,46 @@
-// src/components/layout/MainLayout.jsx - Main layout with navigation
+// src/components/layout/MainLayout.jsx
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { logoutUser } from '../../firebase/auth';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Button } from '@/components/ui/button';
-import CartIcon from '@/components/cart/CartIcon';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
-import { Blockchain } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useCart } from '../../context/CartContext';
+import { logoutUser } from '../../firebase/auth';
+import { Button } from '../ui/button';
+import { Avatar, AvatarFallback } from '../ui/avatar';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator 
+} from '../ui/dropdown-menu';
 import { 
   Home, 
-  Menu, 
-  X, 
+  Search, 
   ShoppingCart, 
-  User, 
   Package, 
   MessageSquare, 
-  LogOut,
-  Carrot,
-  Users,
-  BarChart,
-  ShoppingBag
+  User, 
+  LogOut, 
+  Menu,
+  X,
+  Link as LinkIcon,  // Using Link icon for blockchain
+  Shield,
+  Settings,
+  Plus
 } from 'lucide-react';
 
 const MainLayout = ({ children }) => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { currentUser, userProfile } = useAuth();
-  const navigate = useNavigate();
+  const { cartCount } = useCart();
   const location = useLocation();
-  
-  const isAdmin = userProfile?.role === 'admin';
+  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isAuthenticated = !!currentUser;
   const isRolnik = userProfile?.role === 'rolnik';
   const isKlient = userProfile?.role === 'klient';
-  
+  const isAdmin = userProfile?.role === 'admin';
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -47,300 +49,312 @@ const MainLayout = ({ children }) => {
       console.error('Logout error:', error);
     }
   };
-  
+
   const getInitials = () => {
-    if (!currentUser) return 'U';
-    const name = currentUser.displayName || currentUser.email || '';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+    if (!userProfile) return 'U';
+    const first = userProfile.firstName?.[0] || '';
+    const last = userProfile.lastName?.[0] || '';
+    return (first + last).toUpperCase() || 'U';
   };
-  
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link to="/" className="text-xl font-bold text-green-600 flex items-center">
-            <Carrot className="mr-2" />
-            Farm Direct
-          </Link>
-          
-          <div className="hidden md:flex items-center space-x-4">
-            {currentUser ? (
-              <>
-                {isKlient && (
-                  <CartIcon />
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="p-0">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback>{getInitials()}</AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                      <Link to="/profile">My Profile</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      Logout
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <>
+
+  const navigationItems = [
+    {
+      name: 'Dashboard',
+      href: '/dashboard',
+      icon: Home,
+      show: isAuthenticated
+    },
+    {
+      name: 'Browse Products',
+      href: '/browse',
+      icon: Search,
+      show: isKlient || isAdmin
+    },
+    {
+      name: 'My Products',
+      href: '/products/manage',
+      icon: Package,
+      show: isRolnik || isAdmin
+    },
+    {
+      name: 'Add Product',
+      href: '/products/add',
+      icon: Plus,
+      show: isRolnik || isAdmin
+    },
+    {
+      name: 'Orders',
+      href: '/orders',
+      icon: ShoppingCart,
+      show: isAuthenticated
+    },
+    {
+      name: 'Messages',
+      href: '/chat',
+      icon: MessageSquare,
+      show: isAuthenticated
+    },
+    {
+      name: 'Blockchain',
+      href: '/blockchain',
+      icon: LinkIcon,  // Using LinkIcon instead of non-existent Blockchain
+      show: isRolnik || isAdmin
+    }
+  ];
+
+  const visibleNavItems = navigationItems.filter(item => item.show);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link to="/" className="flex-shrink-0 flex items-center">
+                  <div className="h-8 w-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">FD</span>
+                  </div>
+                  <span className="ml-2 text-xl font-bold text-gray-900">Farm Direct</span>
+                </Link>
+              </div>
+              <div className="flex items-center space-x-4">
                 <Button variant="ghost" asChild>
                   <Link to="/login">Login</Link>
                 </Button>
                 <Button asChild>
                   <Link to="/register">Register</Link>
                 </Button>
-              </>
-            )}
+              </div>
+            </div>
           </div>
-          
-          <button
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </header>
-      
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white shadow-lg">
-          <div className="container mx-auto px-4 py-4 space-y-2">
-            {currentUser ? (
-              <>
-                <Link
-                  to="/dashboard"
-                  className="block py-2 px-4 rounded hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Dashboard
+        </nav>
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0">
+            {children}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
+      <nav className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            {/* Logo and primary navigation */}
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center">
+                <Link to="/dashboard" className="flex items-center">
+                  <div className="h-8 w-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">FD</span>
+                  </div>
+                  <span className="ml-2 text-xl font-bold text-gray-900">Farm Direct</span>
                 </Link>
-                {isKlient && (
+              </div>
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                {visibleNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.href || 
+                    (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                  
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                        isActive
+                          ? 'border-green-500 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 mr-2" />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right side navigation */}
+            <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">
+              {/* Cart for clients */}
+              {isKlient && (
+                <Link to="/cart" className="relative p-2">
+                  <ShoppingCart className="h-6 w-6 text-gray-400 hover:text-gray-500" />
+                  {cartCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {cartCount > 9 ? '9+' : cartCount}
+                    </span>
+                  )}
+                </Link>
+              )}
+
+              {/* User menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-green-600 text-white">
+                        {getInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <div className="flex items-center justify-start gap-2 p-2">
+                    <div className="flex flex-col space-y-1 leading-none">
+                      <p className="font-medium text-sm">
+                        {userProfile?.firstName} {userProfile?.lastName}
+                      </p>
+                      <p className="w-[200px] truncate text-xs text-muted-foreground">
+                        {userProfile?.email}
+                      </p>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {userProfile?.role === 'klient' ? 'Customer' : 
+                         userProfile?.role === 'rolnik' ? 'Farmer' : 
+                         userProfile?.role}
+                      </p>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/profile" className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin" className="flex items-center">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Mobile menu button */}
+            <div className="-mr-2 flex items-center sm:hidden">
+              <Button
+                variant="ghost"
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="block h-6 w-6" />
+                ) : (
+                  <Menu className="block h-6 w-6" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden">
+            <div className="pt-2 pb-3 space-y-1">
+              {visibleNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                  (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                
+                return (
                   <Link
-                    to="/cart"
-                    className="block py-2 px-4 rounded hover:bg-gray-100"
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                      isActive
+                        ? 'bg-green-50 border-green-500 text-green-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+                    }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Shopping Cart
+                    <Icon className="w-5 h-5 mr-3" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="pt-4 pb-3 border-t border-gray-200">
+              <div className="flex items-center px-4">
+                <div className="flex-shrink-0">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-green-600 text-white">
+                      {getInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                <div className="ml-3">
+                  <div className="text-base font-medium text-gray-800">
+                    {userProfile?.firstName} {userProfile?.lastName}
+                  </div>
+                  <div className="text-sm font-medium text-gray-500">
+                    {userProfile?.email}
+                  </div>
+                </div>
+                {isKlient && cartCount > 0 && (
+                  <Link to="/cart" className="ml-auto flex-shrink-0 p-1">
+                    <div className="relative">
+                      <ShoppingCart className="h-6 w-6 text-gray-400" />
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {cartCount > 9 ? '9+' : cartCount}
+                      </span>
+                    </div>
                   </Link>
                 )}
+              </div>
+              <div className="mt-3 space-y-1">
                 <Link
                   to="/profile"
-                  className="block py-2 px-4 rounded hover:bg-gray-100"
+                  className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  My Profile
+                  <User className="mr-3 h-5 w-5" />
+                  Profile
                 </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Settings className="mr-3 h-5 w-5" />
+                    Admin Panel
+                  </Link>
+                )}
                 <button
                   onClick={() => {
                     handleLogout();
                     setMobileMenuOpen(false);
                   }}
-                  className="block w-full text-left py-2 px-4 rounded hover:bg-gray-100 text-red-600"
+                  className="flex items-center w-full px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
                 >
+                  <LogOut className="mr-3 h-5 w-5" />
                   Logout
                 </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/login"
-                  className="block py-2 px-4 rounded hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="block py-2 px-4 rounded hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Register
-                </Link>
-              </>
-            )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-      
-      {/* Main content with sidebar */}
-      {currentUser ? (
-        <div className="container mx-auto px-4 py-8 flex flex-col md:flex-row">
-          {/* Sidebar */}
-          <aside className="w-full md:w-64 mb-8 md:mb-0 md:mr-8">
-            <div className="bg-white rounded-lg shadow p-4">
-              <nav className="space-y-2">
-                <Link
-                  to="/dashboard"
-                  className={`flex items-center p-2 rounded-md w-full ${
-                    location.pathname === '/dashboard'
-                      ? 'bg-green-50 text-green-600'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <Home className="mr-2 h-5 w-5" />
-                  Dashboard
-                </Link>
-                
-                {isAdmin && (
-                  <>
-                    <Link
-                      to="/admin/users"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/admin/users')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <Users className="mr-2 h-5 w-5" />
-                      Manage Users
-                    </Link>
-                    
-                    <Link
-                      to="/admin/stats"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/admin/stats')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <BarChart className="mr-2 h-5 w-5" />
-                      Statistics
-                    </Link>
-                  </>
-                )}
-                
-                {isRolnik && (
-                  <>
-                    <Link
-                      to="/products/manage"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/products/manage')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <Package className="mr-2 h-5 w-5" />
-                      Manage Products
-                    </Link>
-                    <Link
-                      to="/blockchain"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/blockchain')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <Blockchain className="mr-2 h-5 w-5" />
-                      Blockchain
-                    </Link>
-                  </>
-                )}
-                
-                {isKlient && (
-                  <>
-                    <Link
-                      to="/browse"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/browse')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <Carrot className="mr-2 h-5 w-5" />
-                      Browse Products
-                    </Link>
+        )}
+      </nav>
 
-                    <Link
-                      to="/cart"
-                      className={`flex items-center p-2 rounded-md w-full ${
-                        location.pathname.startsWith('/cart')
-                          ? 'bg-green-50 text-green-600'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      <ShoppingCart className="mr-2 h-5 w-5" />
-                      Shopping Cart
-                    </Link>
-                  </>
-                )}
-                
-                <Link
-                  to="/orders"
-                  className={`flex items-center p-2 rounded-md w-full ${
-                    location.pathname.startsWith('/orders')
-                      ? 'bg-green-50 text-green-600'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <ShoppingBag className="mr-2 h-5 w-5" />
-                  Orders
-                </Link>
-                
-                <Link
-                  to="/chat"
-                  className={`flex items-center p-2 rounded-md w-full ${
-                    location.pathname.startsWith('/chat')
-                      ? 'bg-green-50 text-green-600'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <MessageSquare className="mr-2 h-5 w-5" />
-                  Messages
-                </Link>
-                
-                <Link
-                  to="/profile"
-                  className={`flex items-center p-2 rounded-md w-full ${
-                    location.pathname.startsWith('/profile')
-                      ? 'bg-green-50 text-green-600'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <User className="mr-2 h-5 w-5" />
-                  Profile
-                </Link>
-                
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center p-2 rounded-md w-full text-red-600 hover:bg-red-50"
-                >
-                  <LogOut className="mr-2 h-5 w-5" />
-                  Logout
-                </button>
-              </nav>
-            </div>
-          </aside>
-          
-          {/* Main content */}
-          <main className="flex-1">
-            <div className="bg-white rounded-lg shadow p-6">
-              {children}
-            </div>
-          </main>
-        </div>
-      ) : (
-        <main className="container mx-auto px-4 py-8">
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
           {children}
-        </main>
-      )}
-      
-      {/* Footer */}
-      <footer className="bg-white shadow-inner mt-8">
-        <div className="container mx-auto px-4 py-6">
-          <p className="text-center text-gray-600">
-            © {new Date().getFullYear()} Farm Direct - Connecting Farmers and Customers
-          </p>
         </div>
-      </footer>
+      </main>
     </div>
   );
 };

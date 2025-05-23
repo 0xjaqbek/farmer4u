@@ -1,419 +1,348 @@
 // src/components/blockchain/ProductGrowthTracker.jsx
 import { useState, useEffect } from 'react';
-import React from 'react';
-import { useParams } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase/config';
-import { useAuth } from '../../context/AuthContext';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getProductById } from '../../firebase/products';
 import { useBlockchain } from './WalletProvider';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
-import blockchainService from '../../services/blockchain';
 import { 
-  Seedling, 
+  ArrowLeft, 
   Sprout, 
-  TreePine, 
-  Flower, 
-  Apple, 
-  Package,
-  Loader2,
-  Camera,
-  Clock,
-  Blockchain
+  Loader2, 
+  Camera, 
+  Plus,
+  Leaf,
+  Flower,
+  Apple,
+  Package
 } from 'lucide-react';
+
 const growthStages = [
-{ id: 'seeding', label: 'Seeding', icon: Seedling, color: 'bg-brown-100 text-brown-800' },
-{ id: 'germination', label: 'Germination', icon: Sprout, color: 'bg-green-100 text-green-800' },
-{ id: 'growing', label: 'Growing', icon: TreePine, color: 'bg-green-200 text-green-900' },
-{ id: 'flowering', label: 'Flowering', icon: Flower, color: 'bg-pink-100 text-pink-800' },
-{ id: 'fruiting', label: 'Fruiting', icon: Apple, color: 'bg-red-100 text-red-800' },
-{ id: 'harvest', label: 'Harvest', icon: Package, color: 'bg-orange-100 text-orange-800' },
+  { value: 'seeding', label: 'Seeding', icon: Sprout, color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'germination', label: 'Germination', icon: Sprout, color: 'bg-green-100 text-green-800' },
+  { value: 'growing', label: 'Growing', icon: Leaf, color: 'bg-green-100 text-green-800' },
+  { value: 'flowering', label: 'Flowering', icon: Flower, color: 'bg-pink-100 text-pink-800' },
+  { value: 'fruiting', label: 'Fruiting', icon: Apple, color: 'bg-red-100 text-red-800' },
+  { value: 'harvest', label: 'Harvest', icon: Package, color: 'bg-orange-100 text-orange-800' },
+  { value: 'post_harvest', label: 'Post Harvest', icon: Package, color: 'bg-blue-100 text-blue-800' },
 ];
+
 export const ProductGrowthTracker = () => {
-const { id } = useParams();
-const { userProfile } = useAuth();
-const { connected, addGrowthUpdate, isLoading: blockchainLoading } = useBlockchain();
-const [product, setProduct] = useState(null);
-const [growthUpdates, setGrowthUpdates] = useState([]);
-const [loading, setLoading] = useState(true);
-const [saving, setSaving] = useState(false);
-const [newUpdate, setNewUpdate] = useState({
-stage: '',
-notes: '',
-images: []
-});
-useEffect(() => {
-fetchProductData();
-}, [id]);
-const fetchProductData = async () => {
-try {
-setLoading(true);
-  // Pobierz dane produktu
-  const productDoc = await getDoc(doc(db, 'products', id));
-  if (productDoc.exists()) {
-    setProduct(productDoc.data());
-  }
-
-  // Pobierz historię wzrostu
-  const updatesDoc = await getDoc(doc(db, 'product_growth', id));
-  if (updatesDoc.exists()) {
-    setGrowthUpdates(updatesDoc.data().updates || []);
-  }
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { connected, isInitialized, addGrowthUpdate } = useBlockchain();
   
-} catch (error) {
-  console.error('Error fetching product data:', error);
-} finally {
-  setLoading(false);
-}
-};
-const handleImageUpload = (e) => {
-const files = Array.from(e.target.files);
-// W rzeczywistej aplikacji, przesłałbyś do Firebase Storage
-setNewUpdate(prev => ({
-...prev,
-images: [...prev.images, ...files.map(f => URL.createObjectURL(f))]
-}));
-};
-const addUpdate = async () => {
-if (!newUpdate.stage) {
-alert('Please select a growth stage');
-return;
-}
-try {
-  setSaving(true);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   
-  const update = {
-    ...newUpdate,
-    timestamp: new Date().toISOString(),
-    id: `update_${Date.now()}`,
-    blockchainSynced: false
-  };
-
-  // Zapisz do Firestore
-  const updatedGrowthUpdates = [...growthUpdates, update];
-  await updateDoc(doc(db, 'product_growth', id), {
-    updates: updatedGrowthUpdates
+  const [updateData, setUpdateData] = useState({
+    stage: 'growing',
+    notes: '',
+    images: []
   });
 
-  // Synchronizuj z blockchain (jeśli połączony)
-  if (connected && product?.blockchainPDA) {
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        const productData = await getProductById(id);
+        setProduct(productData);
+      } catch (err) {
+        console.error('Error fetching product:', err);
+        setError('Failed to load product');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchProduct();
+    }
+  }, [id]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!connected || !isInitialized) {
+      setError('Please connect your wallet first');
+      return;
+    }
+
+    if (!updateData.notes.trim()) {
+      setError('Please add some notes about this growth update');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+
     try {
-      await addGrowthUpdate(id, {
-        ...update,
+      const growthData = {
+        stage: updateData.stage,
+        notes: updateData.notes,
+        images: updateData.images,
         blockchainPDA: product.blockchainPDA
-      });
+      };
+
+      await addGrowthUpdate(id, growthData);
       
-      // Oznacz jako zsynchronizowane
-      update.blockchainSynced = true;
-      await updateDoc(doc(db, 'product_growth', id), {
-        updates: updatedGrowthUpdates.map(u => 
-          u.id === update.id ? { ...u, blockchainSynced: true } : u
-        )
+      setSuccess('Growth update added successfully to blockchain!');
+      setUpdateData({
+        stage: 'growing',
+        notes: '',
+        images: []
       });
-      
-    } catch (blockchainError) {
-      console.error('Blockchain sync failed:', blockchainError);
-      // Dane są już zapisane w Firestore, blockchain sync może być powtórzony później
+
+    } catch (err) {
+      console.error('Failed to add growth update:', err);
+      setError(err.message || 'Failed to add growth update');
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
-  setGrowthUpdates(updatedGrowthUpdates);
-  setNewUpdate({ stage: '', notes: '', images: [] });
-  
-} catch (error) {
-  console.error('Error adding growth update:', error);
-  alert('Failed to add update');
-} finally {
-  setSaving(false);
-}
-};
-const updateActualQuantity = async (quantity) => {
-try {
-await updateDoc(doc(db, 'products', id), {
-actualQuantity: quantity,
-harvestDate: new Date().toISOString()
-});
-  // Sync z blockchain jeśli możliwe
-  if (connected) {
-    try {
-      await blockchainService.updateActualQuantity(id, quantity);
-    } catch  {
-      console.log('Blockchain sync failed, saved locally');
-    }
-  }
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    // In a real implementation, you would upload these to Firebase Storage
+    // For now, we'll just store the file names
+    const imageNames = files.map(file => file.name);
+    setUpdateData(prev => ({
+      ...prev,
+      images: [...prev.images, ...imageNames]
+    }));
+  };
 
-  setProduct(prev => ({ ...prev, actualQuantity: quantity }));
-  
-} catch (error) {
-  console.error('Error updating quantity:', error);
-}
-};
-if (loading) {
-return (
-<div className="flex items-center justify-center h-48">
-<Loader2 className="h-8 w-8 animate-spin" />
-</div>
-);
-}
-const getStageInfo = (stageId) => {
-return growthStages.find(stage => stage.id === stageId) || growthStages[0];
-};
-return (
-<div className="space-y-6">
-<div className="flex justify-between items-center">
-<div>
-<h1 className="text-2xl font-bold">Growth Tracker</h1>
-<p className="text-gray-600">{product?.name}</p>
-</div>
-    {connected && product?.blockchainPDA && (
-      <div className="flex items-center text-green-600 text-sm">
-        <Blockchain className="h-4 w-4 mr-1" />
-        Blockchain Verified
-      </div>
-    )}
-  </div>
+  const selectedStage = growthStages.find(stage => stage.value === updateData.stage);
+  const StageIcon = selectedStage?.icon || Sprout;
 
-  {/* Current Status */}
-  <Card>
-    <CardHeader>
-      <CardTitle>Current Status</CardTitle>
-    </CardHeader>
-    <CardContent>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <p className="text-sm text-gray-500">Current Stage</p>
-          <div className="flex items-center mt-1">
-            {growthUpdates.length > 0 && (
-              <>
-                {React.createElement(getStageInfo(growthUpdates[growthUpdates.length - 1].stage).icon, { 
-                  className: "h-5 w-5 mr-2" 
-                })}
-                <span className="font-medium">
-                  {getStageInfo(growthUpdates[growthUpdates.length - 1].stage).label}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-        
-        <div>
-          <p className="text-sm text-gray-500">Estimated Quantity</p>
-          <p className="font-medium">{product?.stockQuantity} {product?.unit}</p>
-        </div>
-        
-        <div>
-          <p className="text-sm text-gray-500">Actual Quantity</p>
-          <p className="font-medium">
-            {product?.actualQuantity || 'Not harvested yet'}
-          </p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading product...</p>
         </div>
       </div>
-    </CardContent>
-  </Card>
+    );
+  }
 
-  {/* Add New Update */}
-  {userProfile?.role === 'rolnik' && userProfile?.uid === product?.rolnikId && (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add Growth Update</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Growth Stage</Label>
-            <Select onValueChange={(value) => setNewUpdate(prev => ({ ...prev, stage: value }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select growth stage" />
-              </SelectTrigger>
-              <SelectContent>
-                {growthStages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    <div className="flex items-center">
-                      {React.createElement(stage.icon, { className: "h-4 w-4 mr-2" })}
-                      {stage.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+  if (!product) {
+    return (
+      <div className="text-center py-8">
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>Product not found</AlertDescription>
+        </Alert>
+        <Button onClick={() => navigate('/products/manage')}>
+          Back to Products
+        </Button>
+      </div>
+    );
+  }
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={newUpdate.notes}
-              onChange={(e) => setNewUpdate(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder="Describe current state, any observations..."
-              rows={3}
-            />
-          </div>
+  return (
+    <div>
+      <div className="flex items-center mb-6">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate('/products/manage')}
+          className="mr-2"
+        >
+          <ArrowLeft size={18} />
+        </Button>
+        <h1 className="text-2xl font-bold">Growth Tracking</h1>
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="images">Photos</Label>
-            <Input
-              id="images"
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImageUpload}
-            />
-            {newUpdate.images.length > 0 && (
-              <div className="grid grid-cols-4 gap-2 mt-2">
-                {newUpdate.images.map((image, imgIndex) => (
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="mb-6 bg-green-50 border-green-200">
+          <AlertDescription className="text-green-700">{success}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Product Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Product Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start mb-4">
+              <div className="h-20 w-20 overflow-hidden rounded-md border bg-gray-100 mr-4">
+                {product.images && product.images.length > 0 ? (
                   <img
-                    key={imgIndex}
-                    src={image}
-                    alt={`Preview ${imgIndex}`}
-                    className="h-20 w-20 object-cover rounded"
+                    src={product.images[0]}
+                    alt={product.name}
+                    className="h-full w-full object-cover"
                   />
-                ))}
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-gray-400">
+                    <Package className="h-6 w-6" />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-
-          <Button 
-            onClick={addUpdate} 
-            disabled={saving || blockchainLoading}
-            className="w-full"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving Update...
-              </>
-            ) : (
-              <>
-                <Camera className="mr-2 h-4 w-4" />
-                Add Update
-              </>
-            )}
-          </Button>
-
-          {connected && (
-            <div className="text-xs text-center text-gray-500">
-              Update will be automatically synchronized with blockchain
+              <div>
+                <h3 className="font-semibold">{product.name}</h3>
+                <p className="text-sm text-gray-600">{product.category}</p>
+                <div className="flex items-center mt-2 space-x-2">
+                  {product.isOrganic && (
+                    <Badge className="bg-green-100 text-green-800">
+                      <Leaf className="h-3 w-3 mr-1" />
+                      Organic
+                    </Badge>
+                  )}
+                  {product.blockchainPDA ? (
+                    <Badge className="bg-blue-100 text-blue-800">
+                      Blockchain Verified
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">
+                      Not on Blockchain
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )}
-
-  {/* Growth Timeline */}
-  <Card>
-    <CardHeader>
-      <CardTitle>Growth Timeline</CardTitle>
-    </CardHeader>
-    <CardContent>
-      {growthUpdates.length === 0 ? (
-        <p className="text-gray-500 text-center py-8">
-          No growth updates yet. Add the first update to start tracking!
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {growthUpdates.reverse().map((update) => {
-            const stageInfo = getStageInfo(update.stage);
-            const StageIcon = stageInfo.icon;
             
-            return (
-              <div key={update.id} className="flex items-start space-x-4 p-4 border rounded-lg">
-                <div className={`p-2 rounded-full ${stageInfo.color}`}>
-                  <StageIcon className="h-5 w-5" />
+            <p className="text-gray-600 mb-4">{product.description}</p>
+            
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-500">Price</p>
+                <p className="font-medium">${product.price?.toFixed(2)} / {product.unit}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Stock</p>
+                <p className="font-medium">{product.stockQuantity} {product.unit}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Growth Update Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <StageIcon className="mr-2 h-5 w-5" />
+              Add Growth Update
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="stage">Growth Stage</Label>
+                <select
+                  id="stage"
+                  value={updateData.stage}
+                  onChange={(e) => setUpdateData(prev => ({ ...prev, stage: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  {growthStages.map(stage => (
+                    <option key={stage.value} value={stage.value}>
+                      {stage.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Update Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={updateData.notes}
+                  onChange={(e) => setUpdateData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Describe the current state of your crop, any observations, treatments applied, etc..."
+                  rows={4}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="images">Add Photos (Optional)</Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                  <input
+                    type="file"
+                    id="images"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <label htmlFor="images" className="cursor-pointer">
+                    <Camera className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">
+                      Click to upload photos
+                    </p>
+                  </label>
                 </div>
                 
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-medium">{stageInfo.label}</h3>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center text-sm text-gray-500">
-                        <Clock className="h-4 w-4 mr-1" />
-                        {new Date(update.timestamp).toLocaleDateString()}
-                      </div>
-                      
-                      {update.blockchainSynced ? (
-                        <Badge variant="secondary" className="text-xs">
-                          <Blockchain className="h-3 w-3 mr-1" />
-                          On-chain
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs">
-                          Local only
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {update.notes && (
-                    <p className="text-gray-600 mb-2">{update.notes}</p>
-                  )}
-                  
-                  {update.images && update.images.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {update.images.map((image, imgIndex) => (
-                        <img
-                          key={imgIndex}
-                          src={image}
-                          alt={`Update ${imgIndex}`}
-                          className="h-20 w-20 object-cover rounded cursor-pointer hover:opacity-80"
-                          onClick={() => window.open(image, '_blank')}
-                        />
+                {updateData.images.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600">Selected images:</p>
+                    <ul className="text-sm">
+                      {updateData.images.map((image, index) => (
+                        <li key={index} className="text-gray-500">• {image}</li>
                       ))}
-                    </div>
-                  )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                <div className="flex items-start">
+                  <Sprout className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-blue-900 mb-1">Blockchain Recording</h4>
+                    <p className="text-sm text-blue-800">
+                      This growth update will be permanently recorded on the Solana blockchain, 
+                      providing transparent tracking for your customers.
+                    </p>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-    </CardContent>
-  </Card>
 
-  {/* Harvest Update */}
-  {userProfile?.role === 'rolnik' && 
-   userProfile?.uid === product?.rolnikId && 
-   growthUpdates.some(u => u.stage === 'harvest') && 
-   !product?.actualQuantity && (
-    <Card>
-      <CardHeader>
-        <CardTitle>Harvest Complete</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Update the actual harvested quantity for accurate records.
-          </p>
-          
-          <div className="flex items-center space-x-4">
-            <div className="flex-1">
-              <Label htmlFor="actualQuantity">Actual Quantity Harvested</Label>
-              <Input
-                id="actualQuantity"
-                type="number"
-                placeholder={`Expected: ${product?.stockQuantity} ${product?.unit}`}
-                onChange={(e) => {
-                  const quantity = parseInt(e.target.value);
-                  if (quantity > 0) {
-                    updateActualQuantity(quantity);
-                  }
-                }}
-              />
-            </div>
-            <div className="text-sm text-gray-500">
-              {product?.unit}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )}
-</div>
-);
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={submitting || !connected || !isInitialized}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Recording Update...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Growth Update
+                  </>
+                )}
+              </Button>
+
+              {!connected && (
+                <Alert>
+                  <AlertDescription>
+                    Connect your wallet to record growth updates on the blockchain.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 };

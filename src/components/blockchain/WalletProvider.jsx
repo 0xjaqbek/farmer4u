@@ -1,184 +1,194 @@
 // src/components/blockchain/WalletProvider.jsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import {
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { 
   PhantomWalletAdapter,
   SolflareWalletAdapter,
-  TorusWalletAdapter,
+  LedgerWalletAdapter
 } from '@solana/wallet-adapter-wallets';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
-import blockchainService from '../../services/blockchain';
 import { useAuth } from '../../context/AuthContext';
+import blockchainService from '../../services/blockchain';
 
-// CSS dla wallet modal (dodaj do index.css)
-import '@solana/wallet-adapter-react-ui/styles.css';
-
+// Create blockchain context
 const BlockchainContext = createContext();
 
-export const useBlockchain = () => {
-  const context = useContext(BlockchainContext);
-  if (!context) {
-    throw new Error('useBlockchain must be used within BlockchainProvider');
-  }
-  return context;
-};
-
-// Główny provider blockchain
-export const BlockchainProvider = ({ children }) => {
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = clusterApiUrl(network);
-  
-  const wallets = [
-    new PhantomWalletAdapter(),
-    new SolflareWalletAdapter({ network }),
-    new TorusWalletAdapter(),
-  ];
-
-  return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <BlockchainContextProvider>
-            {children}
-          </BlockchainContextProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  );
-};
-
-// Context provider z logiką blockchain
-const BlockchainContextProvider = ({ children }) => {
-  const { wallet, publicKey, connected, disconnect } = useWallet();
+// Blockchain provider component
+const BlockchainProviderInner = ({ children }) => {
+  const { connected, publicKey, wallet } = useWallet();
   const { userProfile } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const [farmerProfile, setFarmerProfile] = useState(null);
+  const [error, setError] = useState(null);
 
-  // Inicjalizacja blockchain service gdy wallet się połączy
+  // Initialize blockchain service when wallet connects
   useEffect(() => {
-    if (connected && wallet && publicKey) {
-      initializeBlockchain();
-    } else {
-      setIsInitialized(false);
-      setFarmerProfile(null);
-    }
-  }, [connected, wallet, publicKey]);
-
-  const initializeBlockchain = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      
-      await blockchainService.initialize(wallet);
-      setIsInitialized(true);
-      
-      // Spróbuj pobrać profil rolnika z blockchain
-      if (userProfile?.role === 'rolnik') {
-        await loadFarmerProfile();
+    const initializeBlockchain = async () => {
+      if (connected && wallet && publicKey && userProfile) {
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+          console.log('Initializing blockchain service...');
+          await blockchainService.initialize(wallet.adapter);
+          setIsInitialized(true);
+          
+          // Load farmer profile if user is a farmer
+          if (userProfile.role === 'rolnik') {
+            await loadFarmerProfile();
+          }
+          
+          console.log('Blockchain service initialized successfully');
+        } catch (err) {
+          console.error('Failed to initialize blockchain service:', err);
+          setError(err.message);
+          setIsInitialized(false);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setIsInitialized(false);
+        setFarmerProfile(null);
+        setError(null);
       }
-      
-      console.log('Blockchain initialized successfully');
-    } catch (err) {
-      console.error('Failed to initialize blockchain:', err);
-      setError('Failed to connect to blockchain');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
 
+    initializeBlockchain();
+  }, [connected, wallet, publicKey, userProfile]);
+
+  // Load farmer profile from blockchain
   const loadFarmerProfile = async () => {
+    if (!connected || !publicKey || !userProfile) return;
+
     try {
+      console.log('Loading farmer profile from blockchain...');
       const profile = await blockchainService.fetchFarmerProfile(publicKey.toString());
       setFarmerProfile(profile);
-    } catch  {
-      console.log('Farmer profile not found on blockchain, needs initialization');
+    } catch (err) {
+      console.error('Failed to load farmer profile:', err);
+      // Don't set error here as profile might not exist yet
     }
   };
 
-  // Inicjalizacja profilu rolnika na blockchain
-  const initializeFarmerOnBlockchain = async () => {
-    if (!userProfile || userProfile.role !== 'rolnik') {
-      throw new Error('Only farmers can initialize blockchain profile');
+  // Initialize farmer profile on blockchain
+  const initializeFarmerProfile = async () => {
+    if (!connected || !isInitialized || !userProfile) {
+      throw new Error('Wallet not connected or blockchain service not ready');
     }
 
+    if (userProfile.role !== 'rolnik') {
+      throw new Error('Only farmers can create blockchain profiles');
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
+      console.log('Creating farmer profile on blockchain...');
       const result = await blockchainService.initializeFarmerProfile(userProfile);
+      
+      // Reload the profile
       await loadFarmerProfile();
+      
+      console.log('Farmer profile created successfully:', result);
       return result;
     } catch (err) {
       console.error('Failed to initialize farmer profile:', err);
+      setError(err.message);
       throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Synchronizacja produktu na blockchain
-  const syncProductToBlockchain = async (productData) => {
+  // Create product on blockchain
+  const createProductOnBlockchain = async (productData) => {
+    if (!connected || !isInitialized || !userProfile) {
+      throw new Error('Wallet not connected or blockchain service not ready');
+    }
+
     try {
-      setIsLoading(true);
+      console.log('Creating product on blockchain...');
       const result = await blockchainService.createProduct(userProfile, productData);
+      console.log('Product created on blockchain:', result);
       return result;
     } catch (err) {
-      console.error('Failed to sync product to blockchain:', err);
+      console.error('Failed to create product on blockchain:', err);
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // Dodanie aktualizacji wzrostu
+  // Add growth update
   const addGrowthUpdate = async (productId, updateData) => {
+    if (!connected || !isInitialized) {
+      throw new Error('Wallet not connected or blockchain service not ready');
+    }
+
     try {
-      setIsLoading(true);
+      console.log('Adding growth update...');
       const result = await blockchainService.addGrowthUpdate(productId, updateData);
+      console.log('Growth update added:', result);
       return result;
     } catch (err) {
       console.error('Failed to add growth update:', err);
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // Tworzenie kampanii crowdfundingowej
+  // Create crowdfunding campaign
   const createCrowdfundingCampaign = async (campaignData) => {
+    if (!connected || !isInitialized || !userProfile) {
+      throw new Error('Wallet not connected or blockchain service not ready');
+    }
+
     try {
-      setIsLoading(true);
+      console.log('Creating crowdfunding campaign...');
       const result = await blockchainService.createCrowdfundingCampaign(userProfile, campaignData);
+      console.log('Crowdfunding campaign created:', result);
       return result;
     } catch (err) {
       console.error('Failed to create crowdfunding campaign:', err);
       throw err;
-    } finally {
-      setIsLoading(false);
+    }
+  };
+
+  // Get wallet balance
+  const getBalance = async () => {
+    if (!connected || !isInitialized) return 0;
+    
+    try {
+      return await blockchainService.getWalletBalance();
+    } catch (err) {
+      console.error('Failed to get wallet balance:', err);
+      return 0;
     }
   };
 
   const value = {
     // Wallet state
-    wallet,
-    publicKey,
     connected,
-    disconnect,
+    publicKey,
+    wallet,
     
-    // Blockchain state
+    // Blockchain service state
     isInitialized,
     isLoading,
     error,
     farmerProfile,
     
     // Actions
-    initializeFarmerOnBlockchain,
-    syncProductToBlockchain,
+    initializeFarmerProfile,
+    createProductOnBlockchain,
     addGrowthUpdate,
     createCrowdfundingCampaign,
     loadFarmerProfile,
+    getBalance,
+    
+    // Service instance for advanced usage
+    blockchainService
   };
 
   return (
@@ -186,4 +196,50 @@ const BlockchainContextProvider = ({ children }) => {
       {children}
     </BlockchainContext.Provider>
   );
+};
+
+// Main blockchain provider with wallet setup
+export const BlockchainProvider = ({ children }) => {
+  // The network can be set to 'devnet', 'testnet', or 'mainnet-beta'
+  const network = WalletAdapterNetwork.Devnet;
+  
+  // You can also provide a custom RPC endpoint
+  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  
+  // Configure available wallets
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new LedgerWalletAdapter(),
+    ],
+    [network]
+  );
+
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <BlockchainProviderInner>
+            {children}
+          </BlockchainProviderInner>
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  );
+};
+
+// Hook to use blockchain context
+export const useBlockchain = () => {
+  const context = useContext(BlockchainContext);
+  if (!context) {
+    throw new Error('useBlockchain must be used within a BlockchainProvider');
+  }
+  return context;
+};
+
+// Export individual hooks for convenience
+export const useWalletConnection = () => {
+  const { connected, publicKey, wallet } = useWallet();
+  return { connected, publicKey, wallet };
 };
