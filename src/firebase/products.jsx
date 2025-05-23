@@ -28,7 +28,11 @@ export const addProduct = async (productData, images) => {
   const docRef = await addDoc(collection(db, 'products'), {
     ...productData,
     images: imageUrls,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    blockchainPDA: "string", // Product PDA address
+    blockchainSynced: true,
+    lastBlockchainUpdate: "timestamp",
+    actualQuantity: 0 // Actual harvested quantity
   });
   
   return docRef.id;

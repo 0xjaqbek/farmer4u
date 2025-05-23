@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import OrderStatus from '@/components/orders/OrderStatus';
 import OrderTimeline from '@/components/orders/OrderTimeline';
-import { QrCode, ArrowLeft, Truck, Package, CheckCircle, XCircle, MessageSquare, Printer } from 'lucide-react';
+import OrderQR from '@/components/orders/OrderQR';
+import { QrCode, ArrowLeft, Truck, Package, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -21,6 +22,7 @@ const OrderDetail = () => {
   const [statusNote, setStatusNote] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   
   const isRolnik = userProfile?.role === 'rolnik';
   const isAdmin = userProfile?.role === 'admin';
@@ -30,16 +32,9 @@ const OrderDetail = () => {
     const fetchOrder = async () => {
       try {
         setLoading(true);
-        setError('');
-        
-        console.log('Fetching order with ID:', id);
+        console.log('Fetching order:', id);
         const orderData = await getOrderById(id);
         console.log('Order data received:', orderData);
-        
-        if (!orderData) {
-          throw new Error('Order not found');
-        }
-        
         setOrder(orderData);
       } catch (error) {
         console.error('Error fetching order:', error);
@@ -49,127 +44,11 @@ const OrderDetail = () => {
       }
     };
     
-    if (id) {
-      fetchOrder();
-    } else {
-      setError('No order ID provided');
-      setLoading(false);
-    }
+    fetchOrder();
   }, [id]);
 
   const handlePrintQR = () => {
-    if (!order) return;
-    
-    const printWindow = window.open('', '', 'width=800,height=600');
-    const trackingUrl = `${window.location.origin}/track/product/${order.trackingId || order.id}`;
-    
-    const content = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Order QR Code - ${order.trackingId || order.id.substring(0, 8)}</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-          }
-          .qr-container {
-            text-align: center;
-            margin-bottom: 30px;
-          }
-          .order-info {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 15px 0 10px;
-          }
-          .tracking-id {
-            font-size: 16px;
-            margin-bottom: 5px;
-          }
-          .order-details {
-            font-size: 14px;
-            margin-bottom: 10px;
-          }
-          .farm-name {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 20px;
-          }
-          .instructions {
-            font-size: 11px;
-            color: #999;
-            margin-top: 20px;
-            text-align: center;
-            max-width: 400px;
-            line-height: 1.4;
-          }
-          .tracking-url {
-            font-size: 10px;
-            color: #666;
-            margin-top: 10px;
-            word-break: break-all;
-          }
-          @media print {
-            .no-print {
-              display: none;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="qr-container">
-          <div class="order-info">Order Tracking QR Code</div>
-          <div class="tracking-id">Order #${order.trackingId || order.id.substring(0, 8)}</div>
-          <div class="order-details">
-            Total: $${order.totalPrice.toFixed(2)} | Status: ${order.status}
-          </div>
-          <div class="farm-name">From: ${order.rolnikName}</div>
-          
-          <div style="margin: 20px 0;">
-            <svg width="200" height="200" style="border: 1px solid #ddd;">
-              <rect width="200" height="200" fill="white"/>
-              <text x="100" y="80" text-anchor="middle" fill="#666" font-size="12">
-                QR Code for Order
-              </text>
-              <text x="100" y="100" text-anchor="middle" fill="#666" font-size="10">
-                #${order.trackingId || order.id.substring(0, 8)}
-              </text>
-              <text x="100" y="120" text-anchor="middle" fill="#666" font-size="8">
-                Scan to track order
-              </text>
-              <text x="100" y="140" text-anchor="middle" fill="#999" font-size="6">
-                Or visit the URL below
-              </text>
-            </svg>
-          </div>
-          
-          <div class="instructions">
-            <strong>How to track your order:</strong><br>
-            Scan this QR code with your phone camera or QR scanner app to view real-time order status and delivery information.
-            <br><br>
-            <strong>Manual tracking:</strong> Visit our website and enter tracking code: <strong>${order.trackingId || order.id.substring(0, 8)}</strong>
-          </div>
-          
-          <div class="tracking-url">
-            Tracking URL: ${trackingUrl}
-          </div>
-        </div>
-        
-        <div class="no-print" style="margin-top: 30px;">
-          <button onclick="window.print()" style="margin-right: 10px; padding: 10px 20px; font-size: 14px;">Print</button>
-          <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px;">Close</button>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    printWindow.document.open();
-    printWindow.document.write(content);
-    printWindow.document.close();
+    setIsQrModalOpen(true);
   };
   
   const handleUpdateStatus = async (newStatus, note = '') => {
@@ -184,14 +63,6 @@ const OrderDetail = () => {
     
     if (!order) {
       const errorMsg = 'Order data not available';
-      console.error(errorMsg);
-      setError(errorMsg);
-      return Promise.reject(new Error(errorMsg));
-    }
-    
-    // Only allow the farmer who owns the order (or admin) to update status
-    if (!isAdmin && order.rolnikId !== userProfile?.uid) {
-      const errorMsg = 'You can only update orders for your own products';
       console.error(errorMsg);
       setError(errorMsg);
       return Promise.reject(new Error(errorMsg));
@@ -271,14 +142,7 @@ const OrderDetail = () => {
   };
   
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading order details...</p>
-        </div>
-      </div>
-    );
+    return <div className="text-center py-8">Loading order details...</div>;
   }
   
   if (error && !order) {
@@ -317,7 +181,7 @@ const OrderDetail = () => {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Order Details</h1>
-          <p className="text-sm text-gray-500">Order #{order.trackingId || order.id.substring(0, 8)}</p>
+          <p className="text-sm text-gray-500">Order #{order.trackingId || order.id}</p>
         </div>
       </div>
       
@@ -399,20 +263,14 @@ const OrderDetail = () => {
                       ))}
                     </ul>
                   ) : (
-                    // Fallback for old order structure or single product orders
+                    // Fallback for old order structure
                     <div className="flex items-start">
-                      <div className="h-20 w-20 overflow-hidden rounded-md mr-4 bg-gray-100">
-                        {order.productImage ? (
-                          <img
-                            src={order.productImage}
-                            alt={order.productName}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center text-gray-400">
-                            <Package className="h-8 w-8" />
-                          </div>
-                        )}
+                      <div className="h-20 w-20 overflow-hidden rounded-md mr-4">
+                        <img
+                          src={order.productImage}
+                          alt={order.productName}
+                          className="h-full w-full object-cover"
+                        />
                       </div>
                       <div className="flex-1">
                         <h4 className="font-medium">{order.productName}</h4>
@@ -421,7 +279,7 @@ const OrderDetail = () => {
                             <span className="text-sm text-gray-500">Quantity:</span> {order.quantity} {order.unit}
                           </p>
                           <p>
-                            <span className="text-sm text-gray-500">Price:</span> ${order.price?.toFixed(2)} / {order.unit}
+                            <span className="text-sm text-gray-500">Price:</span> ${order.price.toFixed(2)} / {order.unit}
                           </p>
                         </div>
                       </div>
@@ -433,9 +291,9 @@ const OrderDetail = () => {
                 <div className="border-t pt-4">
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Subtotal</span>
-                    <span>${(order.subtotal || order.totalPrice)?.toFixed(2)}</span>
+                    <span>${order.subtotal?.toFixed(2) || order.totalPrice?.toFixed(2)}</span>
                   </div>
-                  {order.shippingCost && order.shippingCost > 0 && (
+                  {order.shippingCost > 0 && (
                     <div className="flex justify-between mb-2">
                       <span className="text-gray-600">Shipping</span>
                       <span>${order.shippingCost.toFixed(2)}</span>
@@ -443,7 +301,7 @@ const OrderDetail = () => {
                   )}
                   <div className="flex justify-between font-medium text-lg">
                     <span>Total</span>
-                    <span>${order.totalPrice?.toFixed(2)}</span>
+                    <span>${order.totalPrice.toFixed(2)}</span>
                   </div>
                 </div>
                 
@@ -455,25 +313,20 @@ const OrderDetail = () => {
                       <p>{order.clientName}</p>
                       {order.customerInfo && (
                         <>
-                          {order.customerInfo.address && (
-                            <p className="text-sm text-gray-600">
-                              {order.customerInfo.address}
-                              {order.customerInfo.city && `, ${order.customerInfo.city}`}
-                            </p>
-                          )}
-                          {order.customerInfo.postalCode && (
-                            <p className="text-sm text-gray-600">
-                              {order.customerInfo.postalCode}
-                            </p>
-                          )}
+                          <p className="text-sm text-gray-600">
+                            {order.customerInfo.address}, {order.customerInfo.city}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {order.customerInfo.postalCode}
+                          </p>
                           {order.customerInfo.phone && (
                             <p className="text-sm text-gray-600">
-                              Phone: {order.customerInfo.phone}
+                              {order.customerInfo.phone}
                             </p>
                           )}
                           {order.customerInfo.email && (
                             <p className="text-sm text-gray-600">
-                              Email: {order.customerInfo.email}
+                              {order.customerInfo.email}
                             </p>
                           )}
                         </>
@@ -547,21 +400,21 @@ const OrderDetail = () => {
             </CardHeader>
             <CardContent>
               <p className="text-sm mb-4">
-                Customers can track this order using the tracking ID.
+                Customers can track this order using the tracking ID or by scanning the QR code.
               </p>
               
               <div className="mb-4">
                 <p className="font-semibold">Tracking ID:</p>
                 <div className="flex items-center mt-1">
                   <code className="bg-gray-100 px-3 py-1 rounded text-sm flex-1 text-center">
-                    {order.trackingId || order.id.substring(0, 8)}
+                    {order.trackingId || id.substring(0, 8)}
                   </code>
                 </div>
               </div>
               
               <div className="text-center">
-                <Button variant="outline" className="w-full" asChild>
-                  <Link to={`/track/product/${order.trackingId || order.id}`} target="_blank">
+                <Button variant="outline" className="w-full mb-2" asChild>
+                  <Link to={`/track/product/${order.trackingId || id}`} target="_blank">
                     <Truck className="mr-2 h-4 w-4" />
                     Track Order
                   </Link>
@@ -588,7 +441,7 @@ const OrderDetail = () => {
               <CardContent>
                 <div className="space-y-4">
                   <p className="text-sm">
-                    Current: <OrderStatus status={order.status} size="badge" clickable={false} />
+                    Current Status: <OrderStatus status={order.status} size="badge" clickable={false} />
                   </p>
                   
                   {order.status !== 'completed' && order.status !== 'cancelled' && (
@@ -662,6 +515,13 @@ const OrderDetail = () => {
           )}
         </div>
       </div>
+
+      {/* QR Code Modal */}
+      <OrderQR 
+        order={order} 
+        isOpen={isQrModalOpen} 
+        onClose={() => setIsQrModalOpen(false)} 
+      />
     </div>
   );
 };

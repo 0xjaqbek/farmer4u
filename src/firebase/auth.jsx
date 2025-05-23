@@ -33,7 +33,11 @@ export const registerUser = async (email, password, userData) => {
       lastName: userData.lastName,
       postalCode: userData.postalCode,
       role: userData.role, // 'klient', 'rolnik', or 'admin'
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      blockchainProfilePDA: "string", // Solana PDA address
+      blockchainSynced: true,
+      lastBlockchainUpdate: "timestamp",
+      walletAddress: "string" // Optional: user's wallet address
     };
     
     console.log('Attempting to save user profile to Firestore:', userProfile);

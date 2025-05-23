@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { Blockchain } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Home, 
@@ -229,6 +230,17 @@ const MainLayout = ({ children }) => {
                     >
                       <Package className="mr-2 h-5 w-5" />
                       Manage Products
+                    </Link>
+                    <Link
+                      to="/blockchain"
+                      className={`flex items-center p-2 rounded-md w-full ${
+                        location.pathname.startsWith('/blockchain')
+                          ? 'bg-green-50 text-green-600'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <Blockchain className="mr-2 h-5 w-5" />
+                      Blockchain
                     </Link>
                   </>
                 )}
