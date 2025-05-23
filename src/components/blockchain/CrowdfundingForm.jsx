@@ -146,6 +146,61 @@ export const CrowdfundingForm = ({ onSuccess }) => {
             </p>
           </div>
 
+          {/* Campaign type specific guidance */}
+          {campaignType && (
+            <div className="bg-blue-50 p-4 rounded-md">
+              <div className="flex items-start">
+                <Target className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+                <div className="text-sm text-blue-700">
+                  <p className="font-medium">
+                    {campaignType === 'equipment' && 'Equipment Campaign Tips'}
+                    {campaignType === 'seeds' && 'Seeds & Supplies Campaign Tips'}
+                    {campaignType === 'infrastructure' && 'Infrastructure Campaign Tips'}
+                    {campaignType === 'expansion' && 'Farm Expansion Campaign Tips'}
+                    {campaignType === 'emergency' && 'Emergency Fund Campaign Tips'}
+                  </p>
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    {campaignType === 'equipment' && (
+                      <>
+                        <li>Include specific equipment models and costs</li>
+                        <li>Explain how the equipment will improve production</li>
+                        <li>Consider including installation and training costs</li>
+                      </>
+                    )}
+                    {campaignType === 'seeds' && (
+                      <>
+                        <li>Specify seed varieties and quantities needed</li>
+                        <li>Include costs for soil preparation and fertilizers</li>
+                        <li>Explain expected yield improvements</li>
+                      </>
+                    )}
+                    {campaignType === 'infrastructure' && (
+                      <>
+                        <li>Detail construction or renovation plans</li>
+                        <li>Include permits and professional service costs</li>
+                        <li>Show how infrastructure will benefit long-term production</li>
+                      </>
+                    )}
+                    {campaignType === 'expansion' && (
+                      <>
+                        <li>Explain expansion plans and timeline</li>
+                        <li>Include land acquisition or lease costs</li>
+                        <li>Detail expected increase in production capacity</li>
+                      </>
+                    )}
+                    {campaignType === 'emergency' && (
+                      <>
+                        <li>Clearly explain the emergency situation</li>
+                        <li>Show how funds will address immediate needs</li>
+                        <li>Include recovery timeline and milestones</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-yellow-50 p-4 rounded-md">
             <div className="flex items-start">
               <Calendar className="h-5 w-5 text-yellow-500 mr-2 mt-0.5" />

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const BlockchainSettings = () => {
-  const { userProfile } = useAuth();
+  const { userProfile: _userProfile } = useAuth();
   const { connected, farmerProfile } = useBlockchain();
   const [settings, setSettings] = useState({
     autoSync: true,

@@ -4,11 +4,9 @@ import { Connection, PublicKey, Keypair, clusterApiUrl } from '@solana/web3.js';
 import { AnchorWallet } from '@solana/wallet-adapter-react';
 import CryptoJS from 'crypto-js';
 import { db } from '../firebase/config.jsx';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'; // Added getDoc import
 
-// IDL smart contractu (wygenerowany przez Anchor)
-import farmDirectIdl from '../idl/farm_direct.json';
-
+ import farmDirectIdl from '../../farm-direct-blockchain/target/idl/farm_direct.json';
 class BlockchainService {
   constructor() {
     // Połączenie z Solana Devnet
@@ -17,11 +15,16 @@ class BlockchainService {
     this.program = null;
     this.wallet = null;
     
-    // Klucz do szyfrowania wrażliwych danych (w produkcji z env)
-    this.encryptionKey = process.env.REACT_APP_ENCRYPTION_KEY || 'fallback-key-for-dev';
+    // Klucz do szyfrowania wrażliwych danych (używamy Vite env zamiast process.env)
+    this.encryptionKey = import.meta.env.VITE_ENCRYPTION_KEY || 'fallback-key-for-dev';
     
     // Cache dla już zsynchronizowanych danych
     this.syncedData = new Map();
+  }
+
+  // Helper function to convert string to Uint8Array (Browser-compatible Buffer replacement)
+  stringToUint8Array(str) {
+    return new TextEncoder().encode(str);
   }
 
   // Inicjalizacja z wallet użytkownika
@@ -37,7 +40,7 @@ class BlockchainService {
       { commitment: 'confirmed' }
     );
     
-    this.program = new anchor.Program(farmDirectIdl,, provider);
+    this.program = new anchor.Program(farmDirectIdl, provider);
     console.log('Blockchain service initialized with wallet:', wallet.publicKey.toString());
   }
 
@@ -76,10 +79,10 @@ class BlockchainService {
 
       const encryptedData = this.encryptSensitiveData(sensitiveData);
 
-      // Wygeneruj PDA dla profilu rolnika
+      // Wygeneruj PDA dla profilu rolnika (using Uint8Array instead of Buffer)
       const [farmerProfilePDA] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('farmer_profile'),
+          this.stringToUint8Array('farmer_profile'),
           this.wallet.publicKey.toBuffer(),
         ],
         this.programId
@@ -175,12 +178,12 @@ class BlockchainService {
     }
 
     try {
-      // Wygeneruj PDA dla produktu
+      // Wygeneruj PDA dla produktu (using Uint8Array)
       const [productPDA] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('product'),
+          this.stringToUint8Array('product'),
           this.wallet.publicKey.toBuffer(),
-          Buffer.from(productData.id.substring(0, 8)), // Skrócony ID produktu
+          this.stringToUint8Array(productData.id.substring(0, 8)), // Skrócony ID produktu
         ],
         this.programId
       );
@@ -361,12 +364,12 @@ class BlockchainService {
     }
 
     try {
-      // Wygeneruj PDA dla kampanii
+      // Wygeneruj PDA dla kampanii (using Uint8Array)
       const [campaignPDA] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('campaign'),
+          this.stringToUint8Array('campaign'),
           this.wallet.publicKey.toBuffer(),
-          Buffer.from(campaignData.id.substring(0, 8)),
+          this.stringToUint8Array(campaignData.id.substring(0, 8)),
         ],
         this.programId
       );
@@ -374,7 +377,7 @@ class BlockchainService {
       // Wygeneruj vault dla kampanii
       const [campaignVaultPDA] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('campaign_vault'),
+          this.stringToUint8Array('campaign_vault'),
           campaignPDA.toBuffer(),
         ],
         this.programId
@@ -513,7 +516,7 @@ class BlockchainService {
     try {
       const [farmerProfilePDA] = await PublicKey.findProgramAddress(
         [
-          Buffer.from('farmer_profile'),
+          this.stringToUint8Array('farmer_profile'),
           new PublicKey(farmerWallet).toBuffer(),
         ],
         this.programId

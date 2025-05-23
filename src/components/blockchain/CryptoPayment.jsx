@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Loader2, Zap, DollarSign } from 'lucide-react';
@@ -12,7 +11,6 @@ export const CryptoPayment = ({ order, onPaymentSuccess, onPaymentError }) => {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('SOL');
 
   const handleCryptoPayment = async () => {
     if (!publicKey || !order) return;

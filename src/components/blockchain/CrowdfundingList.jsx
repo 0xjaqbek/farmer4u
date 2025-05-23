@@ -1,6 +1,6 @@
-// src/pages/blockchain/CrowdfundingList.jsx - Browse All Campaigns
+// src/pages/blockchain/CrowdfundingList.jsx - Browse All Campaigns (Fixed)
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useBlockchain } from '../../components/blockchain/WalletProvider';
 import blockchainService from '../../services/blockchain';
@@ -57,15 +57,21 @@ export const CrowdfundingList = () => {
   };
 
   const handleContribute = async (campaignId, amount) => {
+    if (!connected) {
+      setError('Please connect your wallet to contribute');
+      return;
+    }
+
     try {
       // This would call the blockchain method
-      await blockchainService.contributeToCampaign(campaignId, amount, wallet);
+      await blockchainService.contributeToCampaign(campaignId, amount);
       
       // Refresh campaigns to show updated amounts
       await fetchCampaigns();
       
     } catch (error) {
-      throw error;
+      console.error('Contribution failed:', error);
+      setError(`Contribution failed: ${error.message}`);
     }
   };
 

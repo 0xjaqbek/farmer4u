@@ -1,7 +1,6 @@
 // src/components/blockchain/CrowdfundingCard.jsx - Campaign Display Card
-import { useState, useEffect } from 'react';
+import { useState} from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useBlockchain } from './WalletProvider';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Progress } from '../ui/progress';
