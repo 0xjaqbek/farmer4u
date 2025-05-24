@@ -1,0 +1,825 @@
+{
+  "address": "9n3L3af5CKKPqdUXjCFBnt5kto95tqCjZv9vANECuS4V",
+  "metadata": {
+    "name": "farm_direct",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "add_delivery_update",
+      "discriminator": [
+        132,
+        215,
+        91,
+        135,
+        92,
+        154,
+        56,
+        58
+      ],
+      "accounts": [
+        {
+          "name": "product_cycle",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "product_cycle"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": {
+            "defined": {
+              "name": "DeliveryStatus"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": "string"
+        },
+        {
+          "name": "location",
+          "type": {
+            "option": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "add_growth_update",
+      "discriminator": [
+        245,
+        78,
+        60,
+        100,
+        170,
+        186,
+        61,
+        112
+      ],
+      "accounts": [
+        {
+          "name": "product_cycle",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "product_cycle"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "stage",
+          "type": {
+            "defined": {
+              "name": "GrowthStage"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": "string"
+        },
+        {
+          "name": "firebase_image_urls",
+          "type": {
+            "vec": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "contribute_to_campaign",
+      "discriminator": [
+        252,
+        230,
+        228,
+        67,
+        125,
+        117,
+        15,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "campaign",
+          "writable": true
+        },
+        {
+          "name": "campaign_vault",
+          "writable": true
+        },
+        {
+          "name": "contributor",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_crowdfunding_campaign",
+      "discriminator": [
+        182,
+        249,
+        252,
+        180,
+        67,
+        184,
+        194,
+        123
+      ],
+      "accounts": [
+        {
+          "name": "campaign",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign_vault",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "goal_amount",
+          "type": "u64"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        },
+        {
+          "name": "campaign_type",
+          "type": {
+            "defined": {
+              "name": "CampaignType"
+            }
+          }
+        },
+        {
+          "name": "milestones",
+          "type": {
+            "vec": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_product",
+      "discriminator": [
+        183,
+        155,
+        202,
+        119,
+        43,
+        114,
+        174,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "product_cycle",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "farmer_profile",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "farmer_profile"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "product_name",
+          "type": "string"
+        },
+        {
+          "name": "category",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "estimated_harvest_date",
+          "type": "i64"
+        },
+        {
+          "name": "estimated_quantity",
+          "type": "u64"
+        },
+        {
+          "name": "firebase_image_urls",
+          "type": {
+            "vec": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_farmer",
+      "discriminator": [
+        33,
+        254,
+        50,
+        5,
+        156,
+        85,
+        154,
+        149
+      ],
+      "accounts": [
+        {
+          "name": "farmer_profile",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "encrypted_data",
+          "type": "string"
+        },
+        {
+          "name": "public_name",
+          "type": "string"
+        },
+        {
+          "name": "region",
+          "type": "string"
+        },
+        {
+          "name": "certifications",
+          "type": {
+            "vec": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_actual_quantity",
+      "discriminator": [
+        255,
+        99,
+        230,
+        130,
+        102,
+        212,
+        144,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "product_cycle",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "product_cycle"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "actual_quantity",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_farmer_profile",
+      "discriminator": [
+        42,
+        166,
+        26,
+        196,
+        192,
+        94,
+        35,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "farmer_profile",
+          "writable": true
+        },
+        {
+          "name": "farmer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "farmer_profile"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "encrypted_data",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "public_name",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "region",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "certifications",
+          "type": {
+            "option": {
+              "vec": "string"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "CrowdfundingCampaign",
+      "discriminator": [
+        117,
+        222,
+        132,
+        114,
+        5,
+        125,
+        238,
+        88
+      ]
+    },
+    {
+      "name": "FarmerProfile",
+      "discriminator": [
+        167,
+        109,
+        11,
+        146,
+        241,
+        174,
+        172,
+        255
+      ]
+    },
+    {
+      "name": "ProductCycle",
+      "discriminator": [
+        44,
+        34,
+        50,
+        35,
+        94,
+        166,
+        180,
+        113
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedFarmer",
+      "msg": "Unauthorized farmer"
+    },
+    {
+      "code": 6001,
+      "name": "CampaignNotActive",
+      "msg": "Campaign is not active"
+    },
+    {
+      "code": 6002,
+      "name": "CampaignDeadlineExceeded",
+      "msg": "Campaign deadline exceeded"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    }
+  ],
+  "types": [
+    {
+      "name": "CampaignType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Equipment"
+          },
+          {
+            "name": "Seeds"
+          },
+          {
+            "name": "Infrastructure"
+          },
+          {
+            "name": "Expansion"
+          },
+          {
+            "name": "Emergency"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Contributor",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CrowdfundingCampaign",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign_id",
+            "type": "string"
+          },
+          {
+            "name": "farmer",
+            "type": "pubkey"
+          },
+          {
+            "name": "title",
+            "type": "string"
+          },
+          {
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "goal_amount",
+            "type": "u64"
+          },
+          {
+            "name": "current_amount",
+            "type": "u64"
+          },
+          {
+            "name": "deadline",
+            "type": "i64"
+          },
+          {
+            "name": "campaign_type",
+            "type": {
+              "defined": {
+                "name": "CampaignType"
+              }
+            }
+          },
+          {
+            "name": "milestones",
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "contributors",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Contributor"
+                }
+              }
+            }
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeliveryStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Preparing"
+          },
+          {
+            "name": "Packed"
+          },
+          {
+            "name": "InTransit"
+          },
+          {
+            "name": "Delivered"
+          },
+          {
+            "name": "Completed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeliveryUpdate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "DeliveryStatus"
+              }
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "notes",
+            "type": "string"
+          },
+          {
+            "name": "location",
+            "type": {
+              "option": "string"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FarmerProfile",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "farmer",
+            "type": "pubkey"
+          },
+          {
+            "name": "encrypted_data",
+            "type": "string"
+          },
+          {
+            "name": "public_name",
+            "type": "string"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "certifications",
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "verification_status",
+            "type": "bool"
+          },
+          {
+            "name": "reputation_score",
+            "type": "u64"
+          },
+          {
+            "name": "total_products",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GrowthStage",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Seeding"
+          },
+          {
+            "name": "Germination"
+          },
+          {
+            "name": "Growing"
+          },
+          {
+            "name": "Flowering"
+          },
+          {
+            "name": "Fruiting"
+          },
+          {
+            "name": "Harvest"
+          },
+          {
+            "name": "PostHarvest"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GrowthUpdate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stage",
+            "type": {
+              "defined": {
+                "name": "GrowthStage"
+              }
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "notes",
+            "type": "string"
+          },
+          {
+            "name": "firebase_image_urls",
+            "type": {
+              "vec": "string"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProductCycle",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "product_id",
+            "type": "string"
+          },
+          {
+            "name": "farmer",
+            "type": "pubkey"
+          },
+          {
+            "name": "product_name",
+            "type": "string"
+          },
+          {
+            "name": "category",
+            "type": "string"
+          },
+          {
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "estimated_harvest_date",
+            "type": "i64"
+          },
+          {
+            "name": "estimated_quantity",
+            "type": "u64"
+          },
+          {
+            "name": "actual_quantity",
+            "type": "u64"
+          },
+          {
+            "name": "firebase_image_urls",
+            "type": {
+              "vec": "string"
+            }
+          },
+          {
+            "name": "growth_updates",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "GrowthUpdate"
+                }
+              }
+            }
+          },
+          {
+            "name": "delivery_updates",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DeliveryUpdate"
+                }
+              }
+            }
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}
