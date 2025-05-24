@@ -1,10 +1,11 @@
+// farm-direct-blockchain/programs/farm-direct-blockchain/src/lib.rs - Fixed Version
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::hash::hash;
 
 declare_id!("9n3L3af5CKKPqdUXjCFBnt5kto95tqCjZv9vANECuS4V");
 
 #[program]
-pub mod farm_direct {
+pub mod farm_direct_blockchain {
     use super::*;
 
     pub fn initialize_farmer(
@@ -219,7 +220,7 @@ pub mod farm_direct {
 // Data structures
 #[account]
 pub struct FarmerProfile {
-    pub farmer: Pubkey,
+    pub farmer: Pubkey,                    // Changed from farmer_wallet to farmer
     pub encrypted_data: String,
     pub public_name: String,
     pub region: String,
@@ -265,7 +266,7 @@ pub struct CrowdfundingCampaign {
     pub updated_at: i64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct GrowthUpdate {
     pub stage: GrowthStage,
     pub timestamp: i64,
@@ -273,7 +274,7 @@ pub struct GrowthUpdate {
     pub firebase_image_urls: Vec<String>,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct DeliveryUpdate {
     pub status: DeliveryStatus,
     pub timestamp: i64,
@@ -281,14 +282,14 @@ pub struct DeliveryUpdate {
     pub location: Option<String>,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct Contributor {
     pub wallet: Pubkey,
     pub amount: u64,
     pub timestamp: i64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub enum GrowthStage {
     Seeding,
     Germination,
@@ -299,7 +300,7 @@ pub enum GrowthStage {
     PostHarvest,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub enum DeliveryStatus {
     Preparing,
     Packed,
@@ -308,7 +309,7 @@ pub enum DeliveryStatus {
     Completed,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub enum CampaignType {
     Equipment,
     Seeds,
@@ -319,7 +320,13 @@ pub enum CampaignType {
 
 #[derive(Accounts)]
 pub struct InitializeFarmer<'info> {
-    #[account(init, payer = farmer, space = 8 + 1000)]
+    #[account(
+        init, 
+        payer = farmer, 
+        space = 8 + 32 + 256 + 128 + 64 + 512 + 1 + 8 + 8 + 8 + 8,
+        seeds = [b"farmer_profile", farmer.key().as_ref()],
+        bump
+    )]
     pub farmer_profile: Account<'info, FarmerProfile>,
     #[account(mut)]
     pub farmer: Signer<'info>,
@@ -328,7 +335,12 @@ pub struct InitializeFarmer<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateFarmerProfile<'info> {
-    #[account(mut, has_one = farmer @ ErrorCode::UnauthorizedFarmer)]
+    #[account(
+        mut, 
+        has_one = farmer @ ErrorCode::UnauthorizedFarmer,
+        seeds = [b"farmer_profile", farmer.key().as_ref()],
+        bump
+    )]
     pub farmer_profile: Account<'info, FarmerProfile>,
     #[account(mut)]
     pub farmer: Signer<'info>,
@@ -336,9 +348,20 @@ pub struct UpdateFarmerProfile<'info> {
 
 #[derive(Accounts)]
 pub struct CreateProduct<'info> {
-    #[account(init, payer = farmer, space = 8 + 2000)]
+    #[account(
+        init, 
+        payer = farmer, 
+        space = 8 + 64 + 32 + 128 + 64 + 256 + 8 + 8 + 8 + 512 + 2048 + 2048 + 8 + 8,
+        seeds = [b"product", farmer.key().as_ref(), &Clock::get().unwrap().unix_timestamp.to_le_bytes()[0..8]],
+        bump
+    )]
     pub product_cycle: Account<'info, ProductCycle>,
-    #[account(mut, has_one = farmer @ ErrorCode::UnauthorizedFarmer)]
+    #[account(
+        mut, 
+        has_one = farmer @ ErrorCode::UnauthorizedFarmer,
+        seeds = [b"farmer_profile", farmer.key().as_ref()],
+        bump
+    )]
     pub farmer_profile: Account<'info, FarmerProfile>,
     #[account(mut)]
     pub farmer: Signer<'info>,
@@ -347,7 +370,10 @@ pub struct CreateProduct<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateProduct<'info> {
-    #[account(mut, has_one = farmer @ ErrorCode::UnauthorizedFarmer)]
+    #[account(
+        mut, 
+        has_one = farmer @ ErrorCode::UnauthorizedFarmer
+    )]
     pub product_cycle: Account<'info, ProductCycle>,
     #[account(mut)]
     pub farmer: Signer<'info>,
@@ -355,10 +381,20 @@ pub struct UpdateProduct<'info> {
 
 #[derive(Accounts)]
 pub struct CreateCrowdfundingCampaign<'info> {
-    #[account(init, payer = farmer, space = 8 + 1500)]
+    #[account(
+        init, 
+        payer = farmer, 
+        space = 8 + 64 + 32 + 128 + 256 + 8 + 8 + 8 + 64 + 512 + 2048 + 1 + 8 + 8,
+        seeds = [b"campaign", farmer.key().as_ref(), &Clock::get().unwrap().unix_timestamp.to_le_bytes()[0..8]],
+        bump
+    )]
     pub campaign: Account<'info, CrowdfundingCampaign>,
-    /// CHECK: Safe vault
-    #[account(mut)]
+    /// CHECK: Safe vault account
+    #[account(
+        mut,
+        seeds = [b"campaign_vault", campaign.key().as_ref()],
+        bump
+    )]
     pub campaign_vault: AccountInfo<'info>,
     #[account(mut)]
     pub farmer: Signer<'info>,
@@ -369,7 +405,7 @@ pub struct CreateCrowdfundingCampaign<'info> {
 pub struct ContributeToCampaign<'info> {
     #[account(mut)]
     pub campaign: Account<'info, CrowdfundingCampaign>,
-    /// CHECK: Safe vault
+    /// CHECK: Safe vault account
     #[account(mut)]
     pub campaign_vault: AccountInfo<'info>,
     #[account(mut)]
