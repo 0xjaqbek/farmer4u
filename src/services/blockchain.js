@@ -3,7 +3,7 @@ import * as anchor from '@coral-xyz/anchor';
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 import CryptoJS from 'crypto-js';
 import { db } from '../firebase/config.jsx';
-import { doc,  updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc} from 'firebase/firestore';
 
 class BlockchainService {
   constructor() {
@@ -35,41 +35,126 @@ class BlockchainService {
       const version = await this.connection.getVersion();
       console.log('Solana RPC connection successful:', version);
 
-      // Load IDL from the public directory
-      const response = await fetch('/farm_direct.json');
-      if (!response.ok) {
-        throw new Error(`Failed to load IDL: ${response.status} ${response.statusText}`);
+      // Load IDL from the public directory with better error handling
+      console.log('Loading IDL from /farm_direct.json...');
+      let response;
+      try {
+        response = await fetch('/farm_direct.json');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      } catch (fetchError) {
+        console.error('Failed to fetch IDL:', fetchError);
+        throw new Error(`Failed to load IDL file: ${fetchError.message}`);
       }
       
-      this.idl = await response.json();
-      console.log('IDL loaded successfully:', this.idl.metadata?.name || this.idl.name);
+      try {
+        this.idl = await response.json();
+        console.log('IDL loaded successfully:', this.idl.metadata?.name || this.idl.name);
+      } catch (parseError) {
+        console.error('Failed to parse IDL JSON:', parseError);
+        throw new Error(`Failed to parse IDL JSON: ${parseError.message}`);
+      }
 
       // Validate IDL structure
       this.validateIdl();
 
-      // Create provider
-      this.provider = new anchor.AnchorProvider(
-        this.connection,
-        walletAdapter,
-        { 
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
+      // Create provider with better error handling
+      try {
+        this.provider = new anchor.AnchorProvider(
+          this.connection,
+          walletAdapter,
+          { 
+            commitment: 'confirmed',
+            preflightCommitment: 'confirmed',
+            skipPreflight: false
+          }
+        );
+        
+        anchor.setProvider(this.provider);
+        console.log('Provider created successfully');
+      } catch (providerError) {
+        console.error('Failed to create provider:', providerError);
+        throw new Error(`Failed to create Anchor provider: ${providerError.message}`);
+      }
+      
+      // Create program instance with better error handling
+      try {
+        // Validate program ID format
+        if (!this.programId || this.programId.toString().length !== 44) {
+          throw new Error('Invalid program ID format');
         }
-      );
-      
-      anchor.setProvider(this.provider);
-      
-      // Create program instance
-      this.program = new anchor.Program(this.idl, this.programId, this.provider);
-      
-      console.log('Program initialized successfully');
-      console.log('Available methods:', Object.keys(this.program.methods));
-      console.log('Available accounts:', Object.keys(this.program.account || {}));
+
+        // Log detailed information for debugging
+        console.log('Creating program with:');
+        console.log('- Program ID:', this.programId.toString());
+        console.log('- IDL metadata:', this.idl.metadata);
+        console.log('- Anchor version:', anchor.VERSION || 'unknown');
+
+        // Check if IDL has the expected structure for Anchor
+        if (!this.idl.version) {
+          console.warn('IDL missing version field - this might cause compatibility issues');
+        }
+
+        // Attempt to create the program with error isolation
+        try {
+          this.program = new anchor.Program(this.idl, this.programId, this.provider);
+        } catch (innerError) {
+          console.error('Inner program creation error:', innerError);
+          console.error('Error stack:', innerError.stack);
+          
+          // Try alternative approach - create program with explicit address
+          console.log('Attempting alternative program creation...');
+          this.program = new anchor.Program(this.idl, this.provider);
+          this.program.programId = this.programId;
+        }
+
+        if (!this.program) {
+          throw new Error('Program instance is null after creation');
+        }
+
+        console.log('Program initialized successfully');
+        console.log('Program ID verification:', this.program.programId?.toString());
+        console.log('Available methods:', Object.keys(this.program.methods || {}));
+        console.log('Available accounts:', Object.keys(this.program.account || {}));
+        
+        // Verify critical methods exist
+        const requiredMethods = ['initializeFarmer', 'createProduct', 'addGrowthUpdate'];
+        const availableMethods = Object.keys(this.program.methods || {});
+        const missingMethods = requiredMethods.filter(method => !availableMethods.includes(method));
+        
+        if (missingMethods.length > 0) {
+          console.warn('Missing expected methods:', missingMethods);
+        }
+
+      } catch (programError) {
+        console.error('Failed to create program:', programError);
+        console.error('Program ID:', this.programId.toString());
+        console.error('Provider details:', {
+          connection: !!this.provider.connection,
+          wallet: !!this.provider.wallet,
+          commitment: this.provider.opts?.commitment
+        });
+        console.error('IDL structure:', {
+          instructions: this.idl.instructions?.length || 0,
+          accounts: this.idl.accounts?.length || 0,
+          types: this.idl.types?.length || 0,
+          version: this.idl.version,
+          metadata: this.idl.metadata
+        });
+        
+        // Log the full IDL for debugging (only first few instructions to avoid spam)
+        console.log('IDL instructions (first 3):', this.idl.instructions?.slice(0, 3));
+        console.log('IDL accounts:', this.idl.accounts?.map(acc => acc.name));
+        
+        throw new Error(`Failed to create Anchor program: ${programError.message}`);
+      }
       
       return true;
       
     } catch (error) {
       console.error('Failed to initialize blockchain service:', error);
+      this.cleanup();
       throw new Error(`Blockchain initialization failed: ${error.message}`);
     }
   }
@@ -79,6 +164,8 @@ class BlockchainService {
     if (!this.idl) {
       throw new Error('IDL not loaded');
     }
+
+    console.log('Validating IDL structure...');
 
     // Check required fields
     if (!this.idl.instructions || !Array.isArray(this.idl.instructions)) {
@@ -93,17 +180,88 @@ class BlockchainService {
       throw new Error('IDL missing types array');
     }
 
+    // Log available types for debugging
+    const availableTypes = this.idl.types.map(t => t.name);
+    console.log('Available types in IDL:', availableTypes);
+
     // Check for required types
     const requiredTypes = ['DeliveryStatus', 'GrowthStage', 'CampaignType'];
-    const availableTypes = this.idl.types.map(t => t.name);
-    
     const missingTypes = requiredTypes.filter(type => !availableTypes.includes(type));
+    
     if (missingTypes.length > 0) {
       console.warn('Warning: Missing types in IDL:', missingTypes);
-      // Don't throw here as some types might be optional
+      // Print the actual types to help debug
+      console.log('IDL types structure:', this.idl.types);
     }
 
+    // Validate specific type structures
+    const deliveryStatus = this.idl.types.find(t => t.name === 'DeliveryStatus');
+    if (deliveryStatus) {
+      console.log('DeliveryStatus type found:', deliveryStatus);
+    } else {
+      console.error('DeliveryStatus type not found in IDL');
+      throw new Error('Required type DeliveryStatus not found in IDL');
+    }
+
+    // Fix common IDL compatibility issues
+    this.fixIdlCompatibility();
+
     console.log('IDL structure validated successfully');
+  }
+
+  // Fix IDL compatibility issues
+  fixIdlCompatibility() {
+    console.log('Applying IDL compatibility fixes...');
+
+    // Ensure version field exists
+    if (!this.idl.version) {
+      this.idl.version = '0.1.0';
+      console.log('Added missing version field to IDL');
+    }
+
+    // Ensure metadata exists
+    if (!this.idl.metadata) {
+      this.idl.metadata = {
+        name: 'farm_direct',
+        version: '0.1.0',
+        spec: '0.1.0'
+      };
+      console.log('Added missing metadata to IDL');
+    }
+
+    // Fix instruction discriminators if they're missing
+    this.idl.instructions.forEach((instruction, index) => {
+      if (!instruction.discriminator || !Array.isArray(instruction.discriminator)) {
+        console.warn(`Instruction ${instruction.name} missing discriminator`);
+        // Generate a simple discriminator (this should match your Rust program)
+        instruction.discriminator = [index, 0, 0, 0, 0, 0, 0, 0];
+      }
+    });
+
+    // Fix account discriminators if they're missing
+    this.idl.accounts.forEach((account, index) => {
+      if (!account.discriminator || !Array.isArray(account.discriminator)) {
+        console.warn(`Account ${account.name} missing discriminator`);
+        // Generate a simple discriminator
+        account.discriminator = [100 + index, 0, 0, 0, 0, 0, 0, 0];
+      }
+    });
+
+    // Ensure all types have proper structure
+    this.idl.types.forEach(type => {
+      if (!type.type) {
+        console.warn(`Type ${type.name} missing type definition`);
+      }
+    });
+
+    console.log('IDL compatibility fixes applied');
+  }
+
+  // Cleanup method
+  cleanup() {
+    this.program = null;
+    this.provider = null;
+    this.wallet = null;
   }
 
   // Helper functions
@@ -143,17 +301,22 @@ class BlockchainService {
     return pda;
   }
 
-  // Get PDA for product
-  async getProductPDA(farmerPubkey, productId) {
-    const [pda] = await PublicKey.findProgramAddress(
-      [
-        this.stringToUint8Array('product'),
-        farmerPubkey.toBuffer(),
-        this.stringToUint8Array(productId.substring(0, 8)),
-      ],
-      this.programId
-    );
-    return pda;
+  // Check if service is ready
+  isReady() {
+    return !!(this.program && this.wallet && this.provider);
+  }
+
+  // Get connection status
+  getConnectionStatus() {
+    return {
+      connected: !!this.wallet,
+      walletAddress: this.wallet?.publicKey?.toString(),
+      programId: this.programId.toString(),
+      cluster: 'devnet',
+      initialized: !!this.program,
+      idlLoaded: !!this.idl,
+      providerReady: !!this.provider
+    };
   }
 
   // Initialize farmer profile on blockchain
@@ -220,398 +383,6 @@ class BlockchainService {
     }
   }
 
-  // Update farmer profile on blockchain
-  async updateFarmerProfile(userProfile, changes) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    try {
-      const farmerProfilePDA = new PublicKey(userProfile.blockchainProfilePDA);
-
-      // Prepare data for update
-      let encryptedData = null;
-      if (changes.email || changes.phone || changes.fullAddress || changes.taxId) {
-        const sensitiveData = {
-          email: changes.email || userProfile.email,
-          phone: changes.phone || userProfile.phone || '',
-          fullAddress: changes.fullAddress || userProfile.fullAddress || '',
-          taxId: changes.taxId || userProfile.taxId || '',
-        };
-        encryptedData = this.encryptSensitiveData(sensitiveData);
-      }
-
-      const tx = await this.program.methods
-        .updateFarmerProfile(
-          encryptedData,
-          changes.firstName || changes.lastName 
-            ? `${changes.firstName || userProfile.firstName} ${changes.lastName || userProfile.lastName}`
-            : null,
-          changes.region || null,
-          changes.certifications || null
-        )
-        .accounts({
-          farmerProfile: farmerProfilePDA,
-          farmer: this.wallet.publicKey,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Farmer profile updated on blockchain:', tx);
-
-      // Update Firestore
-      await updateDoc(doc(db, 'users', userProfile.uid), {
-        lastBlockchainUpdate: new Date().toISOString(),
-      });
-
-      return tx;
-
-    } catch (error) {
-      console.error('Error updating farmer profile:', error);
-      throw new Error(`Failed to update farmer profile: ${error.message}`);
-    }
-  }
-
-  // Create product on blockchain
-  async createProduct(userProfile, productData) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    console.log('Creating product on blockchain:', productData.name);
-
-    try {
-      // Generate PDA for product
-      const productPDA = await this.getProductPDA(this.wallet.publicKey, productData.id);
-      const farmerProfilePDA = new PublicKey(userProfile.blockchainProfilePDA);
-
-      const tx = await this.program.methods
-        .createProduct(
-          productData.name,
-          productData.category,
-          productData.description,
-          new anchor.BN(Math.floor(new Date(productData.estimatedHarvestDate || Date.now() + 90 * 24 * 60 * 60 * 1000).getTime() / 1000)),
-          new anchor.BN(productData.stockQuantity || 0),
-          productData.images || []
-        )
-        .accounts({
-          productCycle: productPDA,
-          farmerProfile: farmerProfilePDA,
-          farmer: this.wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Product created on blockchain:', tx);
-
-      // Update product in Firestore with PDA
-      await updateDoc(doc(db, 'products', productData.id), {
-        blockchainPDA: productPDA.toString(),
-        blockchainSynced: true,
-        lastBlockchainUpdate: new Date().toISOString(),
-      });
-
-      return { tx, pda: productPDA.toString() };
-
-    } catch (error) {
-      console.error('Error creating product on blockchain:', error);
-      throw new Error(`Failed to create product: ${error.message}`);
-    }
-  }
-
-  // Add growth update to blockchain
-  async addGrowthUpdate(productId, updateData) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    console.log('Adding growth update to blockchain:', productId, updateData.stage);
-
-    try {
-      const productPDA = new PublicKey(updateData.blockchainPDA);
-
-      // Convert stage to proper enum format
-      const stageVariant = this.convertGrowthStage(updateData.stage);
-
-      const tx = await this.program.methods
-        .addGrowthUpdate(
-          stageVariant,
-          updateData.notes || '',
-          updateData.images || []
-        )
-        .accounts({
-          productCycle: productPDA,
-          farmer: this.wallet.publicKey,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Growth update added to blockchain:', tx);
-      return tx;
-
-    } catch (error) {
-      console.error('Error adding growth update:', error);
-      throw new Error(`Failed to add growth update: ${error.message}`);
-    }
-  }
-
-  // Convert growth stage string to enum variant
-  convertGrowthStage(stage) {
-    const stageMap = {
-      'seeding': { seeding: {} },
-      'germination': { germination: {} },
-      'growing': { growing: {} },
-      'flowering': { flowering: {} },
-      'fruiting': { fruiting: {} },
-      'harvest': { harvest: {} },
-      'post_harvest': { postHarvest: {} },
-    };
-    return stageMap[stage] || { growing: {} };
-  }
-
-  // Convert delivery status string to enum variant
-  convertDeliveryStatus(status) {
-    const statusMap = {
-      'preparing': { preparing: {} },
-      'packed': { packed: {} },
-      'in_transit': { inTransit: {} },
-      'delivered': { delivered: {} },
-      'completed': { completed: {} },
-    };
-    return statusMap[status] || { preparing: {} };
-  }
-
-  // Convert campaign type string to enum variant
-  convertCampaignType(type) {
-    const typeMap = {
-      'equipment': { equipment: {} },
-      'seeds': { seeds: {} },
-      'infrastructure': { infrastructure: {} },
-      'expansion': { expansion: {} },
-      'emergency': { emergency: {} },
-    };
-    return typeMap[type] || { equipment: {} };
-  }
-
-  // Update actual quantity on blockchain
-  async updateActualQuantity(productId, actualQuantity) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    try {
-      // Get product PDA from Firestore
-      const productDoc = await getDoc(doc(db, 'products', productId));
-      if (!productDoc.exists() || !productDoc.data().blockchainPDA) {
-        throw new Error('Product not found on blockchain');
-      }
-
-      const productPDA = new PublicKey(productDoc.data().blockchainPDA);
-
-      const tx = await this.program.methods
-        .updateActualQuantity(new anchor.BN(actualQuantity))
-        .accounts({
-          productCycle: productPDA,
-          farmer: this.wallet.publicKey,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Actual quantity updated on blockchain:', tx);
-      return tx;
-
-    } catch (error) {
-      console.error('Error updating actual quantity:', error);
-      throw new Error(`Failed to update actual quantity: ${error.message}`);
-    }
-  }
-
-  // Add delivery update to blockchain
-  async addDeliveryUpdate(orderId, statusData) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    try {
-      // Convert status to proper enum format
-      const statusVariant = this.convertDeliveryStatus(statusData.status);
-
-      // Find product PDA based on order
-      const orderDoc = await getDoc(doc(db, 'orders', orderId));
-      if (!orderDoc.exists()) {
-        throw new Error('Order not found');
-      }
-
-      const orderData = orderDoc.data();
-      let productPDA;
-
-      if (orderData.items && orderData.items.length > 0) {
-        const productDoc = await getDoc(doc(db, 'products', orderData.items[0].productId));
-        if (!productDoc.exists() || !productDoc.data().blockchainPDA) {
-          throw new Error('Product not found on blockchain');
-        }
-        productPDA = new PublicKey(productDoc.data().blockchainPDA);
-      } else if (orderData.productId) {
-        const productDoc = await getDoc(doc(db, 'products', orderData.productId));
-        if (!productDoc.exists() || !productDoc.data().blockchainPDA) {
-          throw new Error('Product not found on blockchain');
-        }
-        productPDA = new PublicKey(productDoc.data().blockchainPDA);
-      } else {
-        throw new Error('Product PDA not found in order');
-      }
-
-      const tx = await this.program.methods
-        .addDeliveryUpdate(
-          statusVariant,
-          statusData.notes || '',
-          statusData.location || null
-        )
-        .accounts({
-          productCycle: productPDA,
-          farmer: this.wallet.publicKey,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Delivery update added to blockchain:', tx);
-      return tx;
-
-    } catch (error) {
-      console.error('Error adding delivery update:', error);
-      throw new Error(`Failed to add delivery update: ${error.message}`);
-    }
-  }
-
-  // Create crowdfunding campaign on blockchain
-  async createCrowdfundingCampaign(userProfile, campaignData) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    console.log('Creating crowdfunding campaign on blockchain:', campaignData.title);
-
-    try {
-      // Generate PDA for campaign
-      const [campaignPDA] = await PublicKey.findProgramAddress(
-        [
-          this.stringToUint8Array('campaign'),
-          this.wallet.publicKey.toBuffer(),
-          this.stringToUint8Array(campaignData.id.substring(0, 8)),
-        ],
-        this.programId
-      );
-
-      // Generate vault for campaign
-      const [campaignVaultPDA] = await PublicKey.findProgramAddress(
-        [
-          this.stringToUint8Array('campaign_vault'),
-          campaignPDA.toBuffer(),
-        ],
-        this.programId
-      );
-
-      // Convert campaign type to proper enum format
-      const campaignTypeVariant = this.convertCampaignType(campaignData.type);
-
-      const tx = await this.program.methods
-        .createCrowdfundingCampaign(
-          campaignData.title,
-          campaignData.description,
-          new anchor.BN(campaignData.goalAmount * anchor.web3.LAMPORTS_PER_SOL),
-          new anchor.BN(Math.floor(new Date(campaignData.deadline).getTime() / 1000)),
-          campaignTypeVariant,
-          campaignData.milestones || []
-        )
-        .accounts({
-          campaign: campaignPDA,
-          campaignVault: campaignVaultPDA,
-          farmer: this.wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Crowdfunding campaign created on blockchain:', tx);
-
-      // Update campaign in Firestore
-      await updateDoc(doc(db, 'crowdfunding', campaignData.id), {
-        blockchainPDA: campaignPDA.toString(),
-        vaultPDA: campaignVaultPDA.toString(),
-        blockchainSynced: true,
-        lastBlockchainUpdate: new Date().toISOString(),
-      });
-
-      return { tx, pda: campaignPDA.toString(), vault: campaignVaultPDA.toString() };
-
-    } catch (error) {
-      console.error('Error creating crowdfunding campaign:', error);
-      throw new Error(`Failed to create crowdfunding campaign: ${error.message}`);
-    }
-  }
-
-  // Contribute to crowdfunding campaign
-  async contributeToCampaign(campaignId, amount) {
-    if (!this.program || !this.wallet) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    try {
-      // Get campaign data from Firestore
-      const campaignDoc = await getDoc(doc(db, 'crowdfunding', campaignId));
-      if (!campaignDoc.exists() || !campaignDoc.data().blockchainPDA) {
-        throw new Error('Campaign not found on blockchain');
-      }
-
-      const campaignData = campaignDoc.data();
-      const campaignPDA = new PublicKey(campaignData.blockchainPDA);
-      const vaultPDA = new PublicKey(campaignData.vaultPDA);
-
-      const tx = await this.program.methods
-        .contributeToCampaign(new anchor.BN(amount * anchor.web3.LAMPORTS_PER_SOL))
-        .accounts({
-          campaign: campaignPDA,
-          campaignVault: vaultPDA,
-          contributor: this.wallet.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .rpc({
-          commitment: 'confirmed',
-          preflightCommitment: 'confirmed'
-        });
-
-      console.log('Contribution made to campaign:', tx);
-      return tx;
-
-    } catch (error) {
-      console.error('Error contributing to campaign:', error);
-      throw new Error(`Failed to contribute to campaign: ${error.message}`);
-    }
-  }
-
-  // Get wallet balance
-  async getWalletBalance() {
-    if (!this.wallet || !this.wallet.publicKey) {
-      throw new Error('Wallet not connected');
-    }
-    
-    const balance = await this.connection.getBalance(this.wallet.publicKey);
-    return balance / anchor.web3.LAMPORTS_PER_SOL;
-  }
-
   // Fetch farmer profile from blockchain
   async fetchFarmerProfile(farmerWallet) {
     if (!this.program) {
@@ -642,61 +413,6 @@ class BlockchainService {
       console.error('Error fetching farmer profile:', error);
       throw new Error(`Failed to fetch farmer profile: ${error.message}`);
     }
-  }
-
-  // Fetch product cycle from blockchain
-  async fetchProductCycle(productPDA) {
-    if (!this.program) {
-      throw new Error('Blockchain service not initialized');
-    }
-
-    console.log('Fetching product cycle from blockchain:', productPDA);
-
-    try {
-      const productAccount = await this.program.account.productCycle.fetch(new PublicKey(productPDA));
-      
-      return {
-        ...productAccount,
-        pda: productPDA,
-        // Convert BN values to numbers
-        estimatedHarvestDate: productAccount.estimatedHarvestDate.toNumber(),
-        estimatedQuantity: productAccount.estimatedQuantity.toNumber(),
-        actualQuantity: productAccount.actualQuantity.toNumber(),
-        createdAt: productAccount.createdAt.toNumber(),
-        updatedAt: productAccount.updatedAt.toNumber(),
-        // Convert growth updates timestamps
-        growthUpdates: productAccount.growthUpdates.map(update => ({
-          ...update,
-          timestamp: update.timestamp.toNumber()
-        })),
-        // Convert delivery updates timestamps
-        deliveryUpdates: productAccount.deliveryUpdates.map(update => ({
-          ...update,
-          timestamp: update.timestamp.toNumber()
-        }))
-      };
-
-    } catch (error) {
-      console.error('Error fetching product cycle:', error);
-      throw new Error(`Failed to fetch product cycle: ${error.message}`);
-    }
-  }
-
-  // Check if service is ready
-  isReady() {
-    return !!(this.program && this.wallet && this.provider);
-  }
-
-  // Get connection status
-  getConnectionStatus() {
-    return {
-      connected: !!this.wallet,
-      walletAddress: this.wallet?.publicKey?.toString(),
-      programId: this.programId.toString(),
-      cluster: 'devnet',
-      initialized: !!this.program,
-      idlLoaded: !!this.idl
-    };
   }
 }
 

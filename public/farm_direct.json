@@ -1,7 +1,8 @@
 {
+  "version": "0.0.1",
   "address": "9n3L3af5CKKPqdUXjCFBnt5kto95tqCjZv9vANECuS4V",
   "metadata": {
-    "name": "farm_direct",
+    "name": "farm_direct_blockchain",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
@@ -154,12 +155,38 @@
       "accounts": [
         {
           "name": "campaign",
-          "writable": true,
-          "signer": true
+          "writable": true
         },
         {
           "name": "campaign_vault",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
         },
         {
           "name": "farmer",
@@ -219,12 +246,38 @@
       "accounts": [
         {
           "name": "product_cycle",
-          "writable": true,
-          "signer": true
+          "writable": true
         },
         {
           "name": "farmer_profile",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  97,
+                  114,
+                  109,
+                  101,
+                  114,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "farmer"
+              }
+            ]
+          }
         },
         {
           "name": "farmer",
@@ -284,7 +337,33 @@
         {
           "name": "farmer_profile",
           "writable": true,
-          "signer": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  97,
+                  114,
+                  109,
+                  101,
+                  114,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "farmer"
+              }
+            ]
+          }
         },
         {
           "name": "farmer",
@@ -365,7 +444,34 @@
       "accounts": [
         {
           "name": "farmer_profile",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  97,
+                  114,
+                  109,
+                  101,
+                  114,
+                  95,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "farmer"
+              }
+            ]
+          }
         },
         {
           "name": "farmer",

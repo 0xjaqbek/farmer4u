@@ -21,6 +21,9 @@ import {
   Loader2
 } from 'lucide-react';
 
+import { BlockchainDebug } from '../../components/blockchain/BlockchainDebug';
+import { IdlDebugTool } from '../../components/blockchain/IdlDebugTool';
+
 export const BlockchainDashboard = () => {
   const { userProfile } = useAuth();
   const { connected, farmerProfile, isLoading: blockchainLoading } = useBlockchain();
@@ -119,6 +122,8 @@ export const BlockchainDashboard = () => {
         <p className="text-gray-600">
           Transparent farming with blockchain technology
         </p>
+        <BlockchainDebug />
+        <IdlDebugTool />
       </div>
 
       {/* Connection Status */}
